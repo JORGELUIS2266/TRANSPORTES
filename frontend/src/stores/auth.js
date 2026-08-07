@@ -184,6 +184,39 @@ export const useAuthStore = defineStore('auth', () => {
     return true;
   }
 
+  // ── Actualizar Usuario Existente (Solo Admin) ───────────────────────────────
+  async function actualizarUsuario(datos) {
+    if (!isAdmin.value) throw new Error('Solo un Administrador puede editar usuarios.');
+    if (!datos.id) throw new Error('ID de usuario requerido para actualizar.');
+
+    const updates = {
+      nombre: datos.nombre,
+      rol:    datos.rol,
+      icono:  datos.rol === 'admin' ? '👑' : datos.rol === 'capturista' ? '✍️' : '👁️'
+    };
+
+    // Solo actualizar contraseña si se proporcionó una nueva
+    if (datos.password && datos.password.trim().length >= 1) {
+      const hash = await sha256Hash(datos.password.trim());
+      updates.password_hash = hash;
+      updates.password_raw  = datos.password.trim();
+    }
+
+    const { data, error } = await supabase.from('usuarios').update(updates).eq('id', datos.id).select();
+    if (error) throw new Error('Error actualizando usuario: ' + error.message);
+
+    // Actualizar en memoria local
+    const idx = users.value.findIndex(u => u && u.id === datos.id);
+    if (idx >= 0) users.value[idx] = { ...users.value[idx], ...updates };
+
+    api.registrarActividad(
+      'Editó usuario',
+      `Actualizó los datos del usuario "${datos.nombre}" (rol: ${datos.rol.toUpperCase()})`,
+      'seguridad', '✏️', currentUser.value, '👥 Panel de Usuarios'
+    );
+    return data?.[0] || datos;
+  }
+
   // Inicializar al cargar
   initAuth();
 
@@ -205,6 +238,7 @@ export const useAuthStore = defineStore('auth', () => {
     login,
     logout,
     agregarUsuario,
+    actualizarUsuario,
     eliminarUsuario,
     cargarUsuariosCloud,
     syncUsersFromCloud: cargarUsuariosCloud
