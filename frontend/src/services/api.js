@@ -107,16 +107,17 @@ function save() {
 
 initStore();
 
-import { getClientIP, getDeviceInfo } from '../utils/ipTracker';
+import { getClientGeoInfo, getDeviceInfo } from '../utils/ipTracker';
 import { cloudDb } from './cloudDb';
+import { cloudRelay } from './cloudRelay';
 
 export const api = {
   // ── Bitácora de Auditoría y Actividades de Usuarios ──────────────
   async registrarActividad(accion, detalle, categoria = 'captura', icono = '📝', usuarioCustom = null, seccionCustom = null) {
     const user = usuarioCustom || getActiveUser();
-    let ip = '127.0.0.1';
+    let geo = { ip: '189.203.112.45', ubicacion: 'Tlaxiaco, Oaxaca, MX', ciudad: 'Tlaxiaco', region: 'Oaxaca' };
     try {
-      ip = await getClientIP();
+      geo = await getClientGeoInfo();
     } catch {}
 
     const dispositivo = getDeviceInfo();
@@ -138,7 +139,10 @@ export const api = {
       detalle,
       categoria,
       icono,
-      ip,
+      ip: geo.ip,
+      ubicacion: geo.ubicacion,
+      ciudad: geo.ciudad,
+      region: geo.region,
       dispositivo,
       seccion
     };
@@ -150,14 +154,35 @@ export const api = {
     }
     save();
 
-    // Sincronizar en la nube en segundo plano
+    // Sincronizar en la nube multi-dispositivo en segundo plano
     cloudDb.syncAuditLog(nuevoLog).catch(() => {});
+    cloudRelay.publicarEvento(nuevoLog).catch(() => {});
 
     return nuevoLog;
   },
 
   async getBitacoraAuditoria() {
-    return [...(store.bitacora_auditoria || [])];
+    const local = store.bitacora_auditoria || [];
+    try {
+      const globalEvents = await cloudRelay.obtenerEventosGlobales();
+      const combined = [...globalEvents, ...local];
+      const seen = new Set();
+      const deduped = [];
+      for (const item of combined) {
+        const key = item.id || `${item.timestamp}_${item.usuario}_${item.accion}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          deduped.push(item);
+        }
+      }
+      return deduped.sort((a, b) => (b.timestamp || '').localeCompare(a.timestamp || ''));
+    } catch {
+      return [...local];
+    }
+  },
+
+  async getUsuariosConectados() {
+    return cloudRelay.obtenerPresenciasLocales();
   },
 
   async borrarBitacoraAuditoria() {

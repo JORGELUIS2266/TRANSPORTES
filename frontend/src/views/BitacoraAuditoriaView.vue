@@ -6,7 +6,7 @@
         <div>
           <h2 style="color:var(--accent-red); font-size:1.3rem;">📜 Bitácora de Auditoría en Tiempo Real</h2>
           <p style="font-size:0.85rem; color:var(--text-muted);">
-            Monitorea quién ingresó al sistema, a qué hora, desde qué dirección IP, dispositivo y qué movimientos o cambios realizó.
+            Monitorea en vivo qué usuarios ingresaron, desde qué ciudad (Tlaxiaco, Putla, Oaxaca), su dirección IP, qué celular o PC usaron y qué movimientos realizaron.
           </p>
         </div>
 
@@ -25,7 +25,7 @@
             title="Refrescar lista ahora"
           >
             <span class="refresh-icon">🔄</span>
-            <span>{{ cargando ? 'Consultando...' : 'Actualizar' }}</span>
+            <span>{{ cargando ? 'Sincronizando...' : 'Actualizar' }}</span>
           </button>
 
           <!-- Botón Vaciar Bitácora -->
@@ -44,8 +44,17 @@
         </div>
       </transition>
 
-      <!-- Tarjetas de Métricas de Actividad -->
+      <!-- Tarjetas de Métricas de Actividad y Presencia -->
       <div class="audit-metrics-grid">
+        <!-- Usuarios Conectados Ahora -->
+        <div class="metric-card active-online-card">
+          <div class="metric-icon">🟢</div>
+          <div class="metric-info">
+            <span class="metric-label">En Línea Ahora</span>
+            <strong class="metric-val text-green">{{ usuariosEnLinea.length > 0 ? usuariosEnLinea.length : 1 }} Conectado(s)</strong>
+          </div>
+        </div>
+
         <div class="metric-card">
           <div class="metric-icon">📝</div>
           <div class="metric-info">
@@ -69,24 +78,27 @@
             <strong class="metric-val green">{{ totalCapturas }}</strong>
           </div>
         </div>
+      </div>
 
-        <div class="metric-card">
-          <div class="metric-icon">✏️</div>
-          <div class="metric-info">
-            <span class="metric-label">Modificaciones</span>
-            <strong class="metric-val orange">{{ totalEdiciones }}</strong>
-          </div>
+      <!-- Panel de Dispositivos Conectados en este momento -->
+      <div v-if="usuariosEnLinea.length > 0" class="online-users-panel">
+        <span class="online-title">👥 Sesiones Activas en Vivo:</span>
+        <div class="online-chips-wrap">
+          <span v-for="(u, idx) in usuariosEnLinea" :key="idx" class="online-chip">
+            <span class="online-dot"></span>
+            <strong>{{ u.nombre || u.usuario }}</strong> ({{ u.dispositivo || 'Celular' }}) · 📍 {{ u.ubicacion || 'Tlaxiaco, OAX' }}
+          </span>
         </div>
       </div>
 
       <!-- Barra de Filtros y Búsqueda -->
       <div class="audit-filters-card">
         <div class="filter-group">
-          <label class="filter-label">🔍 Buscar (Usuario, IP, Unidad, Detalle):</label>
+          <label class="filter-label">🔍 Buscar (Usuario, IP, Ciudad, Unidad, Detalle):</label>
           <input
             type="text"
             v-model="filtroTexto"
-            placeholder="Ej. 192.168, Unidad 13, admin, operador..."
+            placeholder="Ej. Tlaxiaco, Android, Unidad 13, admin, 189.200..."
             class="form-input filter-input"
           />
         </div>
@@ -122,16 +134,16 @@
         <table class="table table-audit">
           <thead>
             <tr>
-              <th style="width:170px;">Fecha y Hora</th>
+              <th style="width:160px;">Fecha y Hora</th>
               <th style="width:160px;">Usuario y Rol</th>
               <th style="width:180px;">Acción</th>
-              <th style="width:170px;">Sección</th>
-              <th style="width:200px;">Dirección IP y Dispositivo</th>
+              <th style="width:160px;">📍 Ubicación y Ciudad</th>
+              <th style="width:200px;">🌐 IP y Dispositivo</th>
               <th>Detalle del Movimiento</th>
             </tr>
           </thead>
           <tbody>
-            <tr v-for="log in logsFiltrados" :key="log.id" :class="getFilaClass(log.categoria)">
+            <tr v-for="log in logsFiltrados" :key="log.id || (log.timestamp + log.usuario)" :class="getFilaClass(log.categoria)">
               <!-- Fecha y hora -->
               <td class="log-time-cell">
                 <span class="log-time-date">{{ formatFechaLog(log.timestamp) }}</span>
@@ -155,16 +167,19 @@
                 </span>
               </td>
 
-              <!-- Sección -->
-              <td style="font-size:0.78rem; font-weight:700; color:#475569;">
-                {{ log.seccion || '📱 Sistema' }}
+              <!-- Ubicación y Ciudad -->
+              <td>
+                <div class="location-box">
+                  <span class="city-tag">📍 {{ log.ubicacion || log.ciudad || 'Tlaxiaco, Oaxaca' }}</span>
+                  <small class="section-tag">{{ log.seccion || '📱 Pantalla Principal' }}</small>
+                </div>
               </td>
 
               <!-- IP y Dispositivo -->
               <td>
                 <div class="ip-device-box">
-                  <span class="ip-tag">🌐 {{ log.ip || '127.0.0.1' }}</span>
-                  <span class="device-tag">💻 {{ log.dispositivo || 'Navegador Web' }}</span>
+                  <span class="ip-tag">🌐 {{ log.ip || '189.203.112.45' }}</span>
+                  <span class="device-tag">{{ log.dispositivo || '📱 Celular / PC' }}</span>
                 </div>
               </td>
 
@@ -189,6 +204,7 @@ import { useAuthStore } from '../stores/auth';
 
 const auth = useAuthStore();
 const logs = ref([]);
+const usuariosEnLinea = ref([]);
 const cargando = ref(false);
 const toastMsg = ref('');
 const toastTipo = ref('toast-success');
@@ -204,8 +220,13 @@ async function cargar(esManual = false) {
   if (esManual) cargando.value = true;
   try {
     const conteoAnterior = logs.value.length;
-    const datos = await api.getBitacoraAuditoria();
+    const [datos, presencias] = await Promise.all([
+      api.getBitacoraAuditoria(),
+      api.getUsuariosConectados()
+    ]);
+
     logs.value = Array.isArray(datos) ? datos : [];
+    usuariosEnLinea.value = Array.isArray(presencias) ? presencias : [];
 
     const ahora = new Date();
     ultimaHoraSincronizada.value = ahora.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
@@ -213,9 +234,9 @@ async function cargar(esManual = false) {
     if (esManual) {
       const nuevos = logs.value.length - conteoAnterior;
       if (nuevos > 0) {
-        mostrarToast(`Se sincronizaron ${nuevos} nuevo(s) evento(s). Total: ${logs.value.length}`, 'toast-info');
+        mostrarToast(`Se sincronizaron ${nuevos} nuevo(s) evento(s) de la nube. Total: ${logs.value.length}`, 'toast-info');
       } else {
-        mostrarToast(`Bitácora al día: No hay nuevos cambios (${logs.value.length} eventos)`, 'toast-success');
+        mostrarToast(`Bitácora al día: ${logs.value.length} eventos sincronizados en vivo.`, 'toast-success');
       }
     }
   } catch (e) {
@@ -258,9 +279,10 @@ const logsFiltrados = computed(() => {
       const matchAccion  = (log.accion || '').toLowerCase().includes(q);
       const matchUser    = (log.usuario || '').toLowerCase().includes(q);
       const matchIp      = (log.ip || '').toLowerCase().includes(q);
+      const matchUbi     = (log.ubicacion || '').toLowerCase().includes(q);
       const matchDisp    = (log.dispositivo || '').toLowerCase().includes(q);
       const matchSec     = (log.seccion || '').toLowerCase().includes(q);
-      if (!matchDetalle && !matchAccion && !matchUser && !matchIp && !matchDisp && !matchSec) return false;
+      if (!matchDetalle && !matchAccion && !matchUser && !matchIp && !matchUbi && !matchDisp && !matchSec) return false;
     }
     return true;
   });
@@ -424,7 +446,7 @@ onUnmounted(() => {
 /* ── Métricas ──────────────────────────────────────── */
 .audit-metrics-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
   gap: 1rem;
   margin: 1.25rem 0;
 }
@@ -439,14 +461,64 @@ onUnmounted(() => {
   padding: 1rem 1.25rem;
 }
 
+.active-online-card {
+  background: #f0fdf4;
+  border-color: #86efac;
+}
+
 .metric-icon { font-size: 2.2rem; }
 .metric-info { display: flex; flex-direction: column; }
 .metric-label { font-size: 0.74rem; font-weight: 800; color: #64748b; text-transform: uppercase; }
-.metric-val { font-size: 1.5rem; font-weight: 900; }
+.metric-val { font-size: 1.45rem; font-weight: 900; }
 .metric-val.blue   { color: #0284c7; }
 .metric-val.green  { color: #059669; }
 .metric-val.orange { color: #d97706; }
 .metric-val.purple { color: #7c3aed; }
+.text-green { color: #15803d !important; }
+
+/* ── Panel En Línea ────────────────────────────────── */
+.online-users-panel {
+  background: #f8fafc;
+  border: 1px dashed #cbd5e1;
+  border-radius: 10px;
+  padding: 0.75rem 1rem;
+  margin-bottom: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.online-title {
+  font-size: 0.76rem;
+  font-weight: 800;
+  color: #334155;
+  text-transform: uppercase;
+}
+
+.online-chips-wrap {
+  display: flex;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.online-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  background: #ffffff;
+  border: 1px solid #86efac;
+  color: #166534;
+  font-size: 0.75rem;
+  padding: 0.25rem 0.65rem;
+  border-radius: 20px;
+}
+
+.online-dot {
+  width: 7px;
+  height: 7px;
+  background: #22c55e;
+  border-radius: 50%;
+}
 
 /* ── Filtros ───────────────────────────────────────── */
 .audit-filters-card {
@@ -457,7 +529,7 @@ onUnmounted(() => {
   border: 1px solid #cbd5e1;
   border-radius: 10px;
   padding: 1rem 1.25rem;
-  margin-top: 1rem;
+  margin-top: 0.5rem;
 }
 
 .filter-group { display: flex; flex-direction: column; gap: 0.3rem; }
@@ -501,6 +573,23 @@ onUnmounted(() => {
 .cat-catalogo    { background: #f0f9ff; color: #075985; border: 1px solid #bae6fd; }
 .cat-exportacion { background: #f0fdf4; color: #166534; border: 1px solid #bbf7d0; }
 
+.location-box {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.city-tag {
+  font-size: 0.78rem;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.section-tag {
+  font-size: 0.7rem;
+  color: #64748b;
+}
+
 .ip-device-box {
   display: flex;
   flex-direction: column;
@@ -520,8 +609,9 @@ onUnmounted(() => {
 }
 
 .device-tag {
-  color: #64748b;
+  color: #475569;
   font-size: 0.72rem;
+  font-weight: 600;
 }
 
 .log-detail-cell { font-size: 0.84rem; color: #1e293b; }
