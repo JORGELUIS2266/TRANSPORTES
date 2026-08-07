@@ -1,6 +1,8 @@
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
 import { sha256Hash, encryptPayload, decryptPayload } from '../utils/crypto';
+import { cloudDatabase } from '../services/cloudDatabase';
+import { api } from '../services/api';
 
 const USERS_STORAGE_KEY = 'th_users_encrypted_v2';
 const SESSION_STORAGE_KEY = 'th_session_encrypted_v2';
@@ -10,7 +12,7 @@ const SEED_USERS = [
   {
     id: 'u_admin',
     username: 'admin',
-    passwordHash: 'th_admin_hash_protected', // Verificado con sha256
+    passwordHash: 'th_admin_hash_protected',
     rawHint: 'admin123',
     nombre: 'Administrador General',
     rol: 'admin',
@@ -40,10 +42,11 @@ export const useAuthStore = defineStore('auth', () => {
   const users = ref([]);
   const currentUser = ref(null);
   const showUserAdminModal = ref(false);
+  const isCloudSynced = ref(false);
 
   async function initAuth() {
     try {
-      // 1. Cargar usuarios cifrados
+      // 1. Cargar usuarios locales cifrados
       const rawEncrypted = localStorage.getItem(USERS_STORAGE_KEY);
       if (rawEncrypted) {
         const decrypted = decryptPayload(rawEncrypted);
@@ -64,6 +67,9 @@ export const useAuthStore = defineStore('auth', () => {
       } else {
         currentUser.value = null; // Obligatorio iniciar sesión
       }
+
+      // 3. Sincronizar usuarios desde la nube central
+      syncUsersFromCloud();
     } catch (e) {
       console.error('[auth] Error inicializando auth segura:', e);
       currentUser.value = null;
@@ -87,9 +93,30 @@ export const useAuthStore = defineStore('auth', () => {
     saveUsers();
   }
 
-  function saveUsers() {
+  async function syncUsersFromCloud() {
+    try {
+      const cloudData = await cloudDatabase.fetchCloudData();
+      if (cloudData && Array.isArray(cloudData.users) && cloudData.users.length > 0) {
+        const merged = [...users.value];
+        for (const cu of cloudData.users) {
+          const idx = merged.findIndex(u => u && u.username && u.username.toLowerCase() === (cu.username || '').toLowerCase());
+          if (idx >= 0) merged[idx] = cu;
+          else merged.push(cu);
+        }
+        users.value = merged;
+        saveUsers(false);
+        isCloudSynced.value = true;
+      }
+    } catch {}
+  }
+
+  function saveUsers(pushToCloud = true) {
     const encrypted = encryptPayload(users.value);
     localStorage.setItem(USERS_STORAGE_KEY, encrypted);
+    if (pushToCloud) {
+      // Subir usuarios a la base de datos central en segundo plano
+      api.pushFullStoreToCloud().catch(() => {});
+    }
   }
 
   // ── Permisos y Roles ────────────────────────────────────────────────────────
@@ -116,9 +143,18 @@ export const useAuthStore = defineStore('auth', () => {
     const cleanUser = username.toLowerCase().trim();
     const inputHash = await sha256Hash(password.trim());
 
-    const user = users.value.find(
-      u => u.username.toLowerCase() === cleanUser && u.passwordHash === inputHash
+    // 1. Buscar en memoria local
+    let user = users.value.find(
+      u => u && u.username && u.username.toLowerCase() === cleanUser && u.passwordHash === inputHash
     );
+
+    // 2. Si no se encuentra, consultar la base de datos en la nube en tiempo real
+    if (!user) {
+      await syncUsersFromCloud();
+      user = users.value.find(
+        u => u && u.username && u.username.toLowerCase() === cleanUser && u.passwordHash === inputHash
+      );
+    }
 
     if (!user) {
       // Registrar intento fallido en la bitácora
@@ -188,7 +224,7 @@ export const useAuthStore = defineStore('auth', () => {
     if (!isAdmin.value) throw new Error('Solo un Administrador puede crear usuarios.');
     const uname = (nuevoUsuario.username || '').trim().toLowerCase();
     if (!uname) throw new Error('El nombre de usuario es obligatorio.');
-    if (users.value.some(u => u.username.toLowerCase() === uname)) {
+    if (users.value.some(u => u && u.username && u.username.toLowerCase() === uname)) {
       throw new Error(`El usuario "${uname}" ya existe.`);
     }
 
@@ -206,7 +242,7 @@ export const useAuthStore = defineStore('auth', () => {
     };
 
     users.value.push(rec);
-    saveUsers();
+    saveUsers(true);
 
     api.registrarActividad(
       'Creó nuevo usuario',
@@ -225,9 +261,9 @@ export const useAuthStore = defineStore('auth', () => {
     if (currentUser.value?.id === id) {
       throw new Error('No puedes eliminar tu propio usuario activo.');
     }
-    const victim = users.value.find(u => u.id === id);
-    users.value = users.value.filter(u => u.id !== id);
-    saveUsers();
+    const victim = users.value.find(u => u && u.id === id);
+    users.value = users.value.filter(u => u && u.id !== id);
+    saveUsers(true);
 
     api.registrarActividad(
       'Eliminó usuario',
@@ -248,6 +284,7 @@ export const useAuthStore = defineStore('auth', () => {
     users,
     currentUser,
     showUserAdminModal,
+    isCloudSynced,
     isAuthenticated,
     role,
     isAdmin,
@@ -262,6 +299,7 @@ export const useAuthStore = defineStore('auth', () => {
     login,
     logout,
     agregarUsuario,
-    eliminarUsuario
+    eliminarUsuario,
+    syncUsersFromCloud
   };
 });

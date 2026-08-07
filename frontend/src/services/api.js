@@ -1,5 +1,5 @@
 /**
- * SERVICIO DE DATOS LOCAL CIFRADO Y SEGURO (localStorage)
+ * SERVICIO DE DATOS LOCAL CIFRADO Y SINCRONIZADO EN LA NUBE EN TIEMPO REAL
  * TRANSPORTE TIERRA DE HUMOS — TLAXIACO ➔ PUTLA
  */
 
@@ -8,6 +8,7 @@ import { encryptPayload, decryptPayload } from '../utils/crypto';
 import { getClientGeoInfoSync, getDeviceInfo } from '../utils/ipTracker';
 import { cloudDb } from './cloudDb';
 import { cloudRelay } from './cloudRelay';
+import { cloudDatabase } from './cloudDatabase';
 
 const STORAGE_ENCRYPTED_KEY = 'th_transporte_enc_v3';
 const LEGACY_STORAGE_KEY_V2 = 'th_transporte_v2';
@@ -163,6 +164,12 @@ function initStore() {
     }
 
     save();
+
+    // Sincronizar desde la nube al arrancar
+    setTimeout(() => {
+      api.pullFullStoreFromCloud().catch(() => {});
+    }, 500);
+
   } catch (e) {
     console.error('[api] Error inicializando store cifrado:', e);
     store.duenos = [...DEFAULT_DUENOS];
@@ -172,10 +179,13 @@ function initStore() {
   }
 }
 
-function save() {
+function save(pushToCloud = true) {
   try {
     const encrypted = encryptPayload(store);
     localStorage.setItem(STORAGE_ENCRYPTED_KEY, encrypted);
+    if (pushToCloud) {
+      api.pushFullStoreToCloud().catch(() => {});
+    }
   } catch (e) {
     console.error('[api] Error guardando store cifrado:', e);
   }
@@ -184,6 +194,114 @@ function save() {
 initStore();
 
 export const api = {
+  // ── Sincronización Maestra con la Nube Central ────────────────────
+  async pushFullStoreToCloud() {
+    try {
+      let rawUsers = [];
+      const rawEnc = localStorage.getItem('th_users_encrypted_v2');
+      if (rawEnc) {
+        const dec = decryptPayload(rawEnc);
+        if (Array.isArray(dec)) rawUsers = dec;
+      }
+
+      await cloudDatabase.saveCloudData({
+        users: rawUsers,
+        registros: store.registros || [],
+        unidades: store.unidades || [],
+        duenos: store.duenos || [],
+        conductores: store.conductores || [],
+        bitacora_auditoria: store.bitacora_auditoria || [],
+        prestamos: store.prestamos || [],
+        semana_activa: store.semana_activa || null
+      });
+    } catch {}
+  },
+
+  async pullFullStoreFromCloud() {
+    try {
+      const cloudData = await cloudDatabase.fetchCloudData();
+      if (!cloudData) return false;
+
+      let huboCambios = false;
+
+      // 1. Fusionar registros de vueltas
+      if (Array.isArray(cloudData.registros) && cloudData.registros.length > 0) {
+        const map = new Map();
+        (store.registros || []).forEach(r => { if (r && r.id) map.set(r.id, r); });
+        cloudData.registros.forEach(cr => {
+          if (cr && cr.id) {
+            map.set(cr.id, cr);
+            huboCambios = true;
+          }
+        });
+        store.registros = Array.from(map.values());
+      }
+
+      // 2. Fusionar unidades
+      if (Array.isArray(cloudData.unidades) && cloudData.unidades.length > 0) {
+        const uMap = new Map();
+        (store.unidades || []).forEach(u => { if (u && u.id) uMap.set(u.id, u); });
+        cloudData.unidades.forEach(cu => {
+          if (cu && cu.id) {
+            uMap.set(cu.id, cu);
+            huboCambios = true;
+          }
+        });
+        store.unidades = Array.from(uMap.values());
+      }
+
+      // 3. Fusionar dueños
+      if (Array.isArray(cloudData.duenos) && cloudData.duenos.length > 0) {
+        const dMap = new Map();
+        (store.duenos || []).forEach(d => { if (d && d.id) dMap.set(d.id, d); });
+        cloudData.duenos.forEach(cd => {
+          if (cd && cd.id) {
+            dMap.set(cd.id, cd);
+            huboCambios = true;
+          }
+        });
+        store.duenos = Array.from(dMap.values());
+      }
+
+      // 4. Fusionar conductores
+      if (Array.isArray(cloudData.conductores) && cloudData.conductores.length > 0) {
+        const cMap = new Map();
+        (store.conductores || []).forEach(c => { if (c && c.id) cMap.set(c.id, c); });
+        cloudData.conductores.forEach(cc => {
+          if (cc && cc.id) {
+            cMap.set(cc.id, cc);
+            huboCambios = true;
+          }
+        });
+        store.conductores = Array.from(cMap.values());
+      }
+
+      // 5. Fusionar auditoría
+      if (Array.isArray(cloudData.bitacora_auditoria) && cloudData.bitacora_auditoria.length > 0) {
+        const aMap = new Map();
+        (store.bitacora_auditoria || []).forEach(a => { if (a && a.id) aMap.set(a.id, a); });
+        cloudData.bitacora_auditoria.forEach(ca => {
+          if (ca && ca.id) {
+            aMap.set(ca.id, ca);
+            huboCambios = true;
+          }
+        });
+        store.bitacora_auditoria = Array.from(aMap.values()).sort((x, y) => (y.timestamp || '').localeCompare(x.timestamp || ''));
+      }
+
+      if (cloudData.semana_activa) {
+        store.semana_activa = cloudData.semana_activa;
+      }
+
+      if (huboCambios) {
+        save(false);
+      }
+      return true;
+    } catch {
+      return false;
+    }
+  },
+
   // ── Bitácora de Auditoría y Actividades de Usuarios ──────────────
   async registrarActividad(accion, detalle, categoria = 'captura', icono = '📝', usuarioCustom = null, seccionCustom = null) {
     const user = usuarioCustom || getActiveUser();
@@ -221,7 +339,7 @@ export const api = {
     if (store.bitacora_auditoria.length > 300) {
       store.bitacora_auditoria = store.bitacora_auditoria.slice(0, 300);
     }
-    save();
+    save(true);
 
     // Sincronizar en la nube multi-dispositivo en segundo plano
     cloudDb.syncAuditLog(nuevoLog).catch(() => {});
@@ -231,6 +349,7 @@ export const api = {
   },
 
   async getBitacoraAuditoria() {
+    await this.pullFullStoreFromCloud().catch(() => {});
     const local = store.bitacora_auditoria || [];
     try {
       const globalEvents = await cloudRelay.obtenerEventosGlobales();
@@ -256,7 +375,7 @@ export const api = {
 
   async borrarBitacoraAuditoria() {
     store.bitacora_auditoria = [];
-    save();
+    save(true);
     return true;
   },
 
@@ -267,12 +386,13 @@ export const api = {
 
   setSemanaActiva(semanaId) {
     store.semana_activa = semanaId;
-    save();
+    save(true);
     return semanaId;
   },
 
   // ── Dueños ────────────────────────────────────────────────────────
   async getDuenos() {
+    await this.pullFullStoreFromCloud().catch(() => {});
     return [...(store.duenos || [])];
   },
 
@@ -288,7 +408,7 @@ export const api = {
       else store.duenos.push(dueno);
       this.registrarActividad('Modificó dueño', `Actualizó datos del propietario "${dueno.nombre}"`, 'catalogo', '✏️');
     }
-    save();
+    save(true);
     return dueno;
   },
 
@@ -299,12 +419,13 @@ export const api = {
       if (u.dueno_id === id) u.dueno_id = null;
     });
     this.registrarActividad('Eliminó dueño', `Eliminó al propietario "${dueno?.nombre || id}"`, 'catalogo', '🗑️');
-    save();
+    save(true);
     return true;
   },
 
   // ── Unidades ──────────────────────────────────────────────────────
   async getUnidades() {
+    await this.pullFullStoreFromCloud().catch(() => {});
     const duenosMap = (store.duenos || []).reduce((acc, d) => {
       acc[d.id] = d;
       return acc;
@@ -328,7 +449,7 @@ export const api = {
       else store.unidades.push(unidad);
       this.registrarActividad('Modificó unidad', `Actualizó datos de la Unidad ${unidad.numero}`, 'catalogo', '✏️');
     }
-    save();
+    save(true);
     cloudDb.syncUnidad(unidad).catch(() => {});
     return unidad;
   },
@@ -337,12 +458,13 @@ export const api = {
     const u = (store.unidades || []).find(x => x.id === id);
     store.unidades = (store.unidades || []).filter(x => x.id !== id);
     this.registrarActividad('Eliminó unidad', `Eliminó del catálogo la Unidad ${u?.numero || id}`, 'catalogo', '🗑️');
-    save();
+    save(true);
     return true;
   },
 
   // ── Conductores ───────────────────────────────────────────────────
   async getConductores() {
+    await this.pullFullStoreFromCloud().catch(() => {});
     return [...(store.conductores || [])];
   },
 
@@ -355,12 +477,13 @@ export const api = {
       if (idx >= 0) store.conductores[idx] = { ...store.conductores[idx], ...cond };
       else store.conductores.push(cond);
     }
-    save();
+    save(true);
     return cond;
   },
 
   // ── Registros Operativos por Semana ──────────────────────────────
   async getRegistrosDeSemana(semanaId) {
+    await this.pullFullStoreFromCloud().catch(() => {});
     if (!semanaId) return [];
     return (store.registros || [])
       .filter(r => r && r.semana_id === semanaId)
@@ -368,6 +491,7 @@ export const api = {
   },
 
   async getPendientesArrastre(semanaAnteriorId) {
+    await this.pullFullStoreFromCloud().catch(() => {});
     if (!semanaAnteriorId) return [];
     return (store.registros || [])
       .filter(r => r && r.semana_id === semanaAnteriorId && r.estado === 'pendiente')
@@ -384,7 +508,6 @@ export const api = {
     const totalGen = b1 + b2 + inter;
     const totalNeto = totalGen - comb - imprev;
     const estado = registro.estado || 'completado';
-    const esNuevo = !registro.id;
 
     const rec = {
       id:                registro.id || 'reg_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
@@ -424,7 +547,7 @@ export const api = {
         '💾'
       );
     }
-    save();
+    save(true);
     cloudDb.syncRegistro(rec).catch(() => {});
     return rec;
   },
@@ -442,20 +565,20 @@ export const api = {
         '✅'
       );
     }
-    save();
+    save(true);
     return store.registros[idx] || null;
   },
 
   async eliminarRegistro(id) {
     const r = (store.registros || []).find(x => x && x.id === id);
-    store.registros = (store.registros || []).filter(r => r && r.id !== id);
+    store.registros = (store.registros || []).filter(x => x && x.id !== id);
     this.registrarActividad(
       'Eliminó registro de vuelta',
       `Unidad ${r?.numero_unidad || 'S/N'} (${r?.nombre_conductor || 'Chofer'}) del ${r?.fecha || 'Fecha'} · Monto: $${r?.total_neto || 0}`,
       'eliminacion',
       '🗑️'
     );
-    save();
+    save(true);
     return true;
   },
 
@@ -468,23 +591,25 @@ export const api = {
       'eliminacion',
       '⚠️'
     );
-    save();
+    save(true);
     return true;
   },
 
   async borrarHistorial() {
     store.registros = [];
     this.registrarActividad('Vació historial completo', 'Borró todos los registros del sistema', 'eliminacion', '🚨');
-    save();
+    save(true);
     return true;
   },
 
   async getAllRegistros() {
+    await this.pullFullStoreFromCloud().catch(() => {});
     return [...(store.registros || [])].sort((a, b) => (a.semana_id || '').localeCompare(b.semana_id || ''));
   },
 
   // ── Respaldos Completos Cifrados ──────────────────────────────────
   async getBackupData() {
+    await this.pullFullStoreFromCloud().catch(() => {});
     this.registrarActividad('Exportó respaldo completo', 'Descargó archivo JSON de base de datos cifrada', 'exportacion', '☁️');
     return {
       version: '3.0_ENC',
@@ -513,7 +638,7 @@ export const api = {
     store.bitacora_auditoria = Array.isArray(d.bitacora_auditoria) ? d.bitacora_auditoria : [];
     if (d.semana_activa) store.semana_activa = d.semana_activa;
     this.registrarActividad('Restauró base de datos', 'Cargó un archivo de respaldo previo', 'seguridad', '📂');
-    save();
+    save(true);
     return true;
   },
 
@@ -526,7 +651,7 @@ export const api = {
   async addPrestamo(p) {
     p.id = 'p_' + Date.now();
     store.prestamos.push(p);
-    save();
+    save(true);
     return p;
   },
   async cerrarDia(fecha) {
@@ -535,7 +660,7 @@ export const api = {
     regs.forEach(r => {
       if (r.fecha === fecha && r.estado === 'pendiente') r.estado = 'completado';
     });
-    save();
+    save(true);
     return true;
   }
 };
