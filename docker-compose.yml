@@ -1,0 +1,33 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: th_postgres
+    environment:
+      POSTGRES_DB: transport_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: secretpassword
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./sql/01_schema.sql:/docker-entrypoint-initdb.d/01_schema.sql
+      - ./sql/02_seed.sql:/docker-entrypoint-initdb.d/02_seed.sql
+    restart: always
+
+  postgrest:
+    image: postgrest/postgrest:v12.0.2
+    container_name: th_postgrest
+    ports:
+      - "3000:3000"
+    environment:
+      PGRST_DB_URI: postgres://postgres:secretpassword@postgres:5432/transport_db
+      PGRST_DB_SCHEMA: public
+      PGRST_DB_ANON_ROLE: postgres
+    depends_on:
+      - postgres
+    restart: always
+
+volumes:
+  pgdata:
