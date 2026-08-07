@@ -65,39 +65,9 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue';
 import { useAuthStore } from '../stores/auth';
-import { api } from '../services/api';
 
 const auth = useAuthStore();
-const sincronizando = ref(false);
-let syncInterval = null;
-
-async function sincronizarNubeManual() {
-  sincronizando.value = true;
-  try {
-    await Promise.all([
-      api.pullFullStoreFromCloud(),
-      auth.syncUsersFromCloud()
-    ]);
-  } catch (e) {
-    console.warn('[Navbar] Error sincronizando nube:', e);
-  } finally {
-    setTimeout(() => { sincronizando.value = false; }, 400);
-  }
-}
-
-onMounted(() => {
-  // Sincronización automática de fondo cada 4 segundos
-  syncInterval = setInterval(() => {
-    api.pullFullStoreFromCloud().catch(() => {});
-    auth.syncUsersFromCloud().catch(() => {});
-  }, 4000);
-});
-
-onUnmounted(() => {
-  if (syncInterval) clearInterval(syncInterval);
-});
 
 function cerrarSesion() {
   auth.logout();
