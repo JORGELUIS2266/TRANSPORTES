@@ -536,7 +536,7 @@ const form = ref({
   bitacora_tlaxiaco_putla: 0,
   bitacora_putla_tlaxiaco: 0,
   intermedios:           0,
-  combustible:           0,
+  combustible:           600,
   gastos_imprevistos:    0,
   concepto_gastos:       ''
 });
@@ -681,7 +681,7 @@ async function guardar(estado) {
     form.value.bitacora_tlaxiaco_putla = 0;
     form.value.bitacora_putla_tlaxiaco = 0;
     form.value.intermedios             = 0;
-    form.value.combustible             = 0;
+    form.value.combustible             = 600;
     form.value.gastos_imprevistos      = 0;
     form.value.concepto_gastos         = '';
     alertaDuplicado.value              = false;

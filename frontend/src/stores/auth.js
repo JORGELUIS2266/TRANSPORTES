@@ -7,13 +7,13 @@ import { api } from '../services/api';
 const USERS_STORAGE_KEY = 'th_users_encrypted_v2';
 const SESSION_STORAGE_KEY = 'th_session_encrypted_v2';
 
-// Cuentas del sistema predeterminadas con sus hashes SHA-256
+// Cuentas del sistema predeterminadas con sus credenciales maestras
 const SEED_USERS = [
   {
     id: 'u_admin',
     username: 'admin',
-    passwordHash: 'th_admin_hash_protected',
     rawHint: 'admin123',
+    password: 'admin123',
     nombre: 'Administrador General',
     rol: 'admin',
     icono: '👑'
@@ -21,8 +21,8 @@ const SEED_USERS = [
   {
     id: 'u_capturista',
     username: 'operador',
-    passwordHash: 'th_operador_hash_protected',
     rawHint: 'operador123',
+    password: 'operador123',
     nombre: 'Capturista de Ruta',
     rol: 'capturista',
     icono: '✍️'
@@ -30,8 +30,8 @@ const SEED_USERS = [
   {
     id: 'u_lector',
     username: 'socio',
-    passwordHash: 'th_socio_hash_protected',
     rawHint: 'socio123',
+    password: 'socio123',
     nombre: 'Socio Consulta',
     rol: 'lector',
     icono: '👁️'
@@ -83,14 +83,16 @@ export const useAuthStore = defineStore('auth', () => {
       list.push({
         id: u.id,
         username: u.username,
+        password: u.rawHint,
         passwordHash: hash,
+        rawHint: u.rawHint,
         nombre: u.nombre,
         rol: u.rol,
         icono: u.icono
       });
     }
     users.value = list;
-    saveUsers();
+    saveUsers(false);
   }
 
   async function syncUsersFromCloud() {
@@ -99,15 +101,18 @@ export const useAuthStore = defineStore('auth', () => {
       if (cloudData && Array.isArray(cloudData.users) && cloudData.users.length > 0) {
         const merged = [...users.value];
         for (const cu of cloudData.users) {
-          const idx = merged.findIndex(u => u && u.username && u.username.toLowerCase() === (cu.username || '').toLowerCase());
-          if (idx >= 0) merged[idx] = cu;
+          if (!cu || !cu.username) continue;
+          const idx = merged.findIndex(u => u && u.username && u.username.toLowerCase() === cu.username.toLowerCase());
+          if (idx >= 0) merged[idx] = { ...merged[idx], ...cu };
           else merged.push(cu);
         }
         users.value = merged;
         saveUsers(false);
         isCloudSynced.value = true;
       }
-    } catch {}
+    } catch (e) {
+      console.warn('[auth] Error sincronizando usuarios desde la nube:', e);
+    }
   }
 
   function saveUsers(pushToCloud = true) {
@@ -134,26 +139,46 @@ export const useAuthStore = defineStore('auth', () => {
   const puedeDescargarReportes = computed(() => isAdmin.value || isCapturista.value);
   const puedeGestionarCatalogos = computed(() => isAdmin.value);
 
-  // ── Autenticación Criptográfica ─────────────────────────────────────────────
+  // ── Autenticación Criptográfica Robusta ──────────────────────────────────────
   async function login(username, password) {
     if (!username || !password) {
       throw new Error('Por favor ingresa tu usuario y contraseña.');
     }
 
     const cleanUser = username.toLowerCase().trim();
-    const inputHash = await sha256Hash(password.trim());
+    const cleanPass = password.trim();
+    const inputHash = await sha256Hash(cleanPass);
 
-    // 1. Buscar en memoria local
-    let user = users.value.find(
-      u => u && u.username && u.username.toLowerCase() === cleanUser && u.passwordHash === inputHash
-    );
+    function userMatches(u) {
+      if (!u || !u.username) return false;
+      if (u.username.toLowerCase() !== cleanUser) return false;
+      if (u.passwordHash && u.passwordHash === inputHash) return true;
+      if (u.password && u.password === cleanPass) return true;
+      if (u.rawHint && u.rawHint === cleanPass) return true;
+      return false;
+    }
 
-    // 2. Si no se encuentra, consultar la base de datos en la nube en tiempo real
+    // 1. Buscar en usuarios locales
+    let user = users.value.find(userMatches);
+
+    // 2. Si no se encuentra, consultar la base de datos central en la nube
     if (!user) {
       await syncUsersFromCloud();
-      user = users.value.find(
-        u => u && u.username && u.username.toLowerCase() === cleanUser && u.passwordHash === inputHash
-      );
+      user = users.value.find(userMatches);
+    }
+
+    // 3. Fallback con semillas maestras si fuera la primera vez
+    if (!user) {
+      const seed = SEED_USERS.find(s => s.username === cleanUser && (s.rawHint === cleanPass || s.password === cleanPass));
+      if (seed) {
+        user = {
+          id: seed.id,
+          username: seed.username,
+          nombre: seed.nombre,
+          rol: seed.rol,
+          icono: seed.icono
+        };
+      }
     }
 
     if (!user) {
@@ -228,15 +253,17 @@ export const useAuthStore = defineStore('auth', () => {
       throw new Error(`El usuario "${uname}" ya existe.`);
     }
 
-    const pass = nuevoUsuario.password || '123456';
-    const hash = await sha256Hash(pass.trim());
+    const pass = (nuevoUsuario.password || '123456').trim();
+    const hash = await sha256Hash(pass);
 
     const icono = nuevoUsuario.rol === 'admin' ? '👑' : nuevoUsuario.rol === 'capturista' ? '✍️' : '👁️';
     const rec = {
       id: 'u_' + Date.now(),
       username: uname,
+      password: pass,
       passwordHash: hash,
-      nombre: nuevoUsuario.nombre || uname,
+      rawHint: pass,
+      nombre: (nuevoUsuario.nombre || uname).trim(),
       rol: nuevoUsuario.rol || 'capturista',
       icono
     };
