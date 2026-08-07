@@ -38,7 +38,7 @@
           </button>
 
           <button
-            @click="cerrarSesion"
+            @click.prevent="cerrarSesion"
             class="btn-nav-action btn-logout"
             title="Cerrar sesión activa"
           >
@@ -62,7 +62,7 @@ const auth = useAuthStore();
 
 function cerrarSesion() {
   auth.logout();
-  window.location.reload();
+  window.location.replace('/');
 }
 
 function getRolLabel(rol) {

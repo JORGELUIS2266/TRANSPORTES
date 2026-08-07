@@ -160,18 +160,27 @@ export const useAuthStore = defineStore('auth', () => {
 
   function logout() {
     if (currentUser.value) {
-      api.registrarActividad(
-        'Cierre de sesión',
-        `El usuario "${currentUser.value.nombre}" (${currentUser.value.username}) cerró su sesión`,
-        'seguridad',
-        '🚪',
-        currentUser.value,
-        '🚪 Cierre de Sesión'
-      );
+      try {
+        api.registrarActividad(
+          'Cierre de sesión',
+          `El usuario "${currentUser.value.nombre}" (${currentUser.value.username}) cerró su sesión`,
+          'seguridad',
+          '🚪',
+          currentUser.value,
+          '🚪 Cierre de Sesión'
+        );
+      } catch (e) {
+        console.warn('[auth] Error registrando logout:', e);
+      }
     }
     currentUser.value = null;
-    sessionStorage.removeItem(SESSION_STORAGE_KEY);
-    localStorage.removeItem(SESSION_STORAGE_KEY);
+    try {
+      sessionStorage.clear();
+      localStorage.removeItem(SESSION_STORAGE_KEY);
+      localStorage.removeItem('th_active_session_v2');
+      localStorage.removeItem('th_user');
+      localStorage.removeItem('th_session');
+    } catch {}
   }
 
   // ── Crear nuevo usuario con Hashing SHA-256 (Solo Administrador) ────────────
