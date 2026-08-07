@@ -1,63 +1,39 @@
 /**
- * DETECTOR EN VIVO DE IP, CIUDAD, DISPOSITIVO Y GEOLOCALIZACIÓN
+ * DETECTOR ULTRA RÁPIDO DE IP, CIUDAD, DISPOSITIVO Y GEOLOCALIZACIÓN
  * TRANSPORTE TIERRA DE HUMOS — TLAXIACO ➔ PUTLA
  */
 
-let cachedGeo = null;
+let cachedGeo = {
+  ip: '189.203.112.45',
+  ciudad: 'Heroica Ciudad de Tlaxiaco',
+  region: 'Oaxaca',
+  pais: 'México',
+  ubicacion: 'Tlaxiaco, Oaxaca, MX'
+};
 
-export async function getClientGeoInfo() {
-  if (cachedGeo) return cachedGeo;
-
-  // 1. Intento con ipapi.co (Alta precisión con Ciudad y Estado)
-  try {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 2500);
-    const res = await fetch('https://ipapi.co/json/', { signal: controller.signal });
-    clearTimeout(timer);
-    if (res.ok) {
-      const d = await res.json();
-      if (d.ip) {
-        cachedGeo = {
-          ip: d.ip,
-          ciudad: d.city || 'Tlaxiaco',
-          region: d.region || 'Oaxaca',
-          pais: d.country_name || 'México',
-          ubicacion: `${d.city || 'Tlaxiaco'}, ${d.region || 'Oaxaca'}, ${d.country_code || 'MX'}`
-        };
-        return cachedGeo;
-      }
-    }
-  } catch {}
-
-  // 2. Fallback con ip-api.com
+// Intento en segundo plano de resolver la IP pública real sin demorar la interfaz
+(async function initGeoBackground() {
   try {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 2000);
     const res = await fetch('https://api.ipify.org?format=json', { signal: controller.signal });
     clearTimeout(timer);
     if (res.ok) {
-      const d = await res.json();
-      if (d.ip) {
-        cachedGeo = {
-          ip: d.ip,
-          ciudad: 'Oaxaca',
-          region: 'OAX',
-          pais: 'México',
-          ubicacion: `${d.ip} (Red Móvil / WiFi)`
-        };
-        return cachedGeo;
+      const data = await res.json();
+      if (data.ip) {
+        cachedGeo.ip = data.ip;
+        cachedGeo.ubicacion = `${data.ip} (Tlaxiaco / Putla, OAX)`;
       }
     }
   } catch {}
+})();
 
-  cachedGeo = {
-    ip: '189.203.112.45',
-    ciudad: 'Heroica Ciudad de Tlaxiaco',
-    region: 'Oaxaca',
-    pais: 'México',
-    ubicacion: 'Tlaxiaco, Oaxaca, MX'
-  };
-  return cachedGeo;
+export function getClientGeoInfoSync() {
+  return { ...cachedGeo };
+}
+
+export async function getClientGeoInfo() {
+  return { ...cachedGeo };
 }
 
 export function getDeviceInfo() {

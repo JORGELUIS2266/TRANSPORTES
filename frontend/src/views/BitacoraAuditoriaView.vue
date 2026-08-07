@@ -28,6 +28,11 @@
             <span>{{ cargando ? 'Sincronizando...' : 'Actualizar' }}</span>
           </button>
 
+          <!-- Botón de Prueba de Conexión en Vivo -->
+          <button @click="probarConexion" class="btn btn-sm btn-outline-info" title="Generar evento de prueba en vivo">
+            ⚡ Probar Conexión
+          </button>
+
           <!-- Botón Vaciar Bitácora -->
           <button v-if="auth.isAdmin && logs.length > 0" @click="limpiarBitacora" class="btn btn-delete btn-sm">
             🗑️ Vaciar Historial
@@ -81,9 +86,13 @@
       </div>
 
       <!-- Panel de Dispositivos Conectados en este momento -->
-      <div v-if="usuariosEnLinea.length > 0" class="online-users-panel">
-        <span class="online-title">👥 Sesiones Activas en Vivo:</span>
+      <div class="online-users-panel">
+        <span class="online-title">👥 Sesiones Activas Detectadas en la Red:</span>
         <div class="online-chips-wrap">
+          <span v-if="usuariosEnLinea.length === 0" class="online-chip">
+            <span class="online-dot"></span>
+            <strong>{{ auth.currentUser?.nombre || 'Administrador General' }}</strong> ({{ miDispositivo }}) · 📍 Tlaxiaco, Oaxaca
+          </span>
           <span v-for="(u, idx) in usuariosEnLinea" :key="idx" class="online-chip">
             <span class="online-dot"></span>
             <strong>{{ u.nombre || u.usuario }}</strong> ({{ u.dispositivo || 'Celular' }}) · 📍 {{ u.ubicacion || 'Tlaxiaco, OAX' }}
@@ -93,14 +102,17 @@
 
       <!-- Barra de Filtros y Búsqueda -->
       <div class="audit-filters-card">
-        <div class="filter-group">
+        <div class="filter-group filter-search-box">
           <label class="filter-label">🔍 Buscar (Usuario, IP, Ciudad, Unidad, Detalle):</label>
-          <input
-            type="text"
-            v-model="filtroTexto"
-            placeholder="Ej. Tlaxiaco, Android, Unidad 13, admin, 189.200..."
-            class="form-input filter-input"
-          />
+          <div class="search-input-wrap">
+            <input
+              type="text"
+              v-model="filtroTexto"
+              placeholder="Ej. Tlaxiaco, Android, Unidad 13, admin, 189.200..."
+              class="form-input filter-input"
+            />
+            <button v-if="filtroTexto" @click="filtroTexto = ''" class="btn-clear-search" title="Borrar búsqueda">✕</button>
+          </div>
         </div>
 
         <div class="filter-group">
@@ -123,11 +135,24 @@
             <option value="exportacion">☁️ Exportación y Respaldos</option>
           </select>
         </div>
+
+        <!-- Botón para Limpiar Filtros si hay alguno activo -->
+        <div v-if="filtroTexto || filtroUsuario || filtroCategoria" class="filter-group filter-reset-group">
+          <label class="filter-label">&nbsp;</label>
+          <button @click="limpiarFiltros" class="btn btn-secondary btn-sm" style="height:38px;">
+            🧹 Limpiar Filtros
+          </button>
+        </div>
       </div>
 
       <!-- Estado Vacío o Tabla de Eventos -->
-      <div v-if="logsFiltrados.length === 0" class="empty-state text-center">
-        No se encontraron registros de auditoría con los filtros seleccionados.
+      <div v-if="logsFiltrados.length === 0" class="empty-state-card text-center">
+        <div style="font-size:2.5rem; margin-bottom:0.5rem;">🔍</div>
+        <p><strong>No se encontraron registros de auditoría con los filtros seleccionados.</strong></p>
+        <p style="font-size:0.85rem; color:#64748b;">(Hay {{ logs.length }} evento(s) guardados en total en el sistema)</p>
+        <button @click="limpiarFiltros" class="btn btn-secondary btn-sm" style="margin-top:0.75rem;">
+          Ver todos los {{ logs.length }} eventos registrados
+        </button>
       </div>
 
       <div v-else class="table-responsive" style="margin-top:1.25rem;">
@@ -137,13 +162,13 @@
               <th style="width:160px;">Fecha y Hora</th>
               <th style="width:160px;">Usuario y Rol</th>
               <th style="width:180px;">Acción</th>
-              <th style="width:160px;">📍 Ubicación y Ciudad</th>
+              <th style="width:170px;">📍 Ubicación y Ciudad</th>
               <th style="width:200px;">🌐 IP y Dispositivo</th>
               <th>Detalle del Movimiento</th>
             </tr>
           </thead>
           <tbody>
-            <tr v-for="log in logsFiltrados" :key="log.id || (log.timestamp + log.usuario)" :class="getFilaClass(log.categoria)">
+            <tr v-for="log in logsFiltrados" :key="log.id || (log.timestamp + log.usuario + Math.random())" :class="getFilaClass(log.categoria)">
               <!-- Fecha y hora -->
               <td class="log-time-cell">
                 <span class="log-time-date">{{ formatFechaLog(log.timestamp) }}</span>
@@ -162,7 +187,7 @@
 
               <!-- Acción -->
               <td>
-                <span class="log-action-badge" :class="'cat-' + log.categoria">
+                <span class="log-action-badge" :class="'cat-' + (log.categoria || 'captura')">
                   {{ log.icono || '📝' }} {{ log.accion }}
                 </span>
               </td>
@@ -170,7 +195,7 @@
               <!-- Ubicación y Ciudad -->
               <td>
                 <div class="location-box">
-                  <span class="city-tag">📍 {{ log.ubicacion || log.ciudad || 'Tlaxiaco, Oaxaca' }}</span>
+                  <span class="city-tag">📍 {{ log.ubicacion || log.ciudad || 'Heroica Ciudad de Tlaxiaco, Oaxaca' }}</span>
                   <small class="section-tag">{{ log.seccion || '📱 Pantalla Principal' }}</small>
                 </div>
               </td>
@@ -201,6 +226,7 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { api } from '../services/api';
 import { useAuthStore } from '../stores/auth';
+import { getDeviceInfo } from '../utils/ipTracker';
 
 const auth = useAuthStore();
 const logs = ref([]);
@@ -209,6 +235,7 @@ const cargando = ref(false);
 const toastMsg = ref('');
 const toastTipo = ref('toast-success');
 const ultimaHoraSincronizada = ref('');
+const miDispositivo = ref(getDeviceInfo());
 
 const filtroTexto     = ref('');
 const filtroUsuario   = ref('');
@@ -234,9 +261,9 @@ async function cargar(esManual = false) {
     if (esManual) {
       const nuevos = logs.value.length - conteoAnterior;
       if (nuevos > 0) {
-        mostrarToast(`Se sincronizaron ${nuevos} nuevo(s) evento(s) de la nube. Total: ${logs.value.length}`, 'toast-info');
+        mostrarToast(`Se sincronizaron ${nuevos} nuevo(s) evento(s). Total: ${logs.value.length}`, 'toast-info');
       } else {
-        mostrarToast(`Bitácora al día: ${logs.value.length} eventos sincronizados en vivo.`, 'toast-success');
+        mostrarToast(`Bitácora al día: ${logs.value.length} eventos sincronizados.`, 'toast-success');
       }
     }
   } catch (e) {
@@ -247,6 +274,22 @@ async function cargar(esManual = false) {
       setTimeout(() => { cargando.value = false; }, 350);
     }
   }
+}
+
+async function probarConexion() {
+  await api.registrarActividad(
+    'Comprobación de conectividad',
+    'El Administrador probó la sincronización en vivo desde ' + miDispositivo.value,
+    'seguridad',
+    '⚡'
+  );
+  await cargar(true);
+}
+
+function limpiarFiltros() {
+  filtroTexto.value = '';
+  filtroUsuario.value = '';
+  filtroCategoria.value = '';
 }
 
 function mostrarToast(mensaje, tipo = 'toast-success') {
@@ -382,6 +425,16 @@ onUnmounted(() => {
 
 .btn-refresh:hover {
   background: #e2e8f0;
+}
+
+.btn-outline-info {
+  background: #eff6ff;
+  border: 1px solid #93c5fd;
+  color: #1d4ed8;
+  font-weight: 700;
+}
+.btn-outline-info:hover {
+  background: #dbeafe;
 }
 
 .refresh-icon {
@@ -522,19 +575,51 @@ onUnmounted(() => {
 
 /* ── Filtros ───────────────────────────────────────── */
 .audit-filters-card {
-  display: grid;
-  grid-template-columns: 2fr 1fr 1fr;
+  display: flex;
+  flex-wrap: wrap;
   gap: 1rem;
   background: #ffffff;
   border: 1px solid #cbd5e1;
   border-radius: 10px;
   padding: 1rem 1.25rem;
   margin-top: 0.5rem;
+  align-items: flex-end;
 }
 
-.filter-group { display: flex; flex-direction: column; gap: 0.3rem; }
+.filter-search-box { flex: 2; min-width: 260px; }
+.filter-group { display: flex; flex-direction: column; gap: 0.3rem; flex: 1; min-width: 180px; }
 .filter-label { font-size: 0.74rem; font-weight: 800; color: #475569; text-transform: uppercase; }
 .filter-input, .filter-select { font-size: 0.85rem; padding: 0.5rem 0.75rem; border-radius: 6px; }
+
+.search-input-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.search-input-wrap input {
+  width: 100%;
+  padding-right: 2rem;
+}
+
+.btn-clear-search {
+  position: absolute;
+  right: 0.5rem;
+  background: none;
+  border: none;
+  color: #94a3b8;
+  cursor: pointer;
+  font-weight: 900;
+  font-size: 0.85rem;
+}
+
+.empty-state-card {
+  background: #f8fafc;
+  border: 2px dashed #cbd5e1;
+  border-radius: 12px;
+  padding: 2.5rem 1rem;
+  margin-top: 1.25rem;
+}
 
 /* ── Tabla de Auditoría ────────────────────────────── */
 .table-audit th {
@@ -623,8 +708,4 @@ onUnmounted(() => {
 .badge-info    { background: #e0f2fe; color: #0284c7; border: 1px solid #7dd3fc; }
 .badge-success { background: #dcfce7; color: #16a34a; border: 1px solid #86efac; }
 .badge-sm      { font-size: 0.65rem; padding: 0.1rem 0.35rem; }
-
-@media (max-width: 900px) {
-  .audit-filters-card { grid-template-columns: 1fr; }
-}
 </style>

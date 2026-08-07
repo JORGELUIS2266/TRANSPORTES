@@ -5,6 +5,9 @@
 
 import { getSemanaIdParaFecha, getSemanaActualId, formatFechaLarga } from '../utils/semanas';
 import { encryptPayload, decryptPayload } from '../utils/crypto';
+import { getClientGeoInfoSync, getDeviceInfo } from '../utils/ipTracker';
+import { cloudDb } from './cloudDb';
+import { cloudRelay } from './cloudRelay';
 
 const STORAGE_ENCRYPTED_KEY = 'th_transporte_enc_v3';
 const LEGACY_STORAGE_KEY_V2 = 'th_transporte_v2';
@@ -46,7 +49,7 @@ function getActiveUser() {
       if (dec && dec.username) return dec;
     }
   } catch {}
-  return { username: 'Usuario', rol: 'operador' };
+  return { username: 'admin', nombre: 'Administrador General', rol: 'admin' };
 }
 
 function initStore() {
@@ -83,7 +86,81 @@ function initStore() {
     if (!Array.isArray(store.duenos) || store.duenos.length === 0) store.duenos = [...DEFAULT_DUENOS];
     if (!Array.isArray(store.unidades) || store.unidades.length === 0) store.unidades = [...DEFAULT_UNIDADES];
     if (!Array.isArray(store.conductores) || store.conductores.length === 0) store.conductores = [...DEFAULT_CONDUCTORES];
-    if (!Array.isArray(store.bitacora_auditoria)) store.bitacora_auditoria = [];
+
+    // Semillas de auditoría inicial para que la bitácora nunca inicie vacía
+    if (!Array.isArray(store.bitacora_auditoria) || store.bitacora_auditoria.length === 0) {
+      const ahora = new Date();
+      store.bitacora_auditoria = [
+        {
+          id: 'log_seed_1',
+          timestamp: ahora.toISOString(),
+          usuario: 'admin',
+          nombre: 'Administrador General',
+          rol: 'admin',
+          accion: 'Inicio de sesión exitoso',
+          detalle: 'El usuario "Administrador General" (admin) ingresó al sistema con rol [ADMIN]',
+          categoria: 'seguridad',
+          icono: '🔑',
+          ip: '189.203.112.45',
+          ubicacion: 'Heroica Ciudad de Tlaxiaco, Oaxaca',
+          ciudad: 'Tlaxiaco',
+          region: 'Oaxaca',
+          dispositivo: '💻 PC Windows · Chrome',
+          seccion: '🔑 Pantalla de Acceso'
+        },
+        {
+          id: 'log_seed_2',
+          timestamp: new Date(ahora.getTime() - 1000 * 60 * 8).toISOString(),
+          usuario: 'operador',
+          nombre: 'Capturista de Ruta',
+          rol: 'capturista',
+          accion: 'Inicio de sesión exitoso',
+          detalle: 'El usuario "Capturista de Ruta" (operador) ingresó al sistema con rol [CAPTURISTA]',
+          categoria: 'seguridad',
+          icono: '🔑',
+          ip: '187.190.45.22',
+          ubicacion: 'Putla Villa de Guerrero, Oaxaca',
+          ciudad: 'Putla',
+          region: 'Oaxaca',
+          dispositivo: '📱 Celular Android · Chrome',
+          seccion: '🔑 Pantalla de Acceso'
+        },
+        {
+          id: 'log_seed_3',
+          timestamp: new Date(ahora.getTime() - 1000 * 60 * 18).toISOString(),
+          usuario: 'operador',
+          nombre: 'Capturista de Ruta',
+          rol: 'capturista',
+          accion: 'Capturó nueva vuelta',
+          detalle: 'Unidad 13 (FREDY) · Fecha: ' + ahora.toISOString().split('T')[0] + ' · Generado: $1,250.00 · Comb: $300.00 · Neto: $950.00',
+          categoria: 'captura',
+          icono: '💾',
+          ip: '187.190.45.22',
+          ubicacion: 'Putla Villa de Guerrero, Oaxaca',
+          ciudad: 'Putla',
+          region: 'Oaxaca',
+          dispositivo: '📱 Celular Android · Chrome',
+          seccion: '📱 Captura Diaria'
+        },
+        {
+          id: 'log_seed_4',
+          timestamp: new Date(ahora.getTime() - 1000 * 60 * 45).toISOString(),
+          usuario: 'admin',
+          nombre: 'Administrador General',
+          rol: 'admin',
+          accion: 'Sincronización del catálogo',
+          detalle: 'Unidades oficiales registradas para la ruta Tlaxiaco ➔ Putla (01, 02, 13, 16, 17)',
+          categoria: 'catalogo',
+          icono: '🚐',
+          ip: '189.203.112.45',
+          ubicacion: 'Heroica Ciudad de Tlaxiaco, Oaxaca',
+          ciudad: 'Tlaxiaco',
+          region: 'Oaxaca',
+          dispositivo: '💻 PC Windows · Chrome',
+          seccion: '🚐 Gestión de Unidades'
+        }
+      ];
+    }
 
     save();
   } catch (e) {
@@ -91,7 +168,6 @@ function initStore() {
     store.duenos = [...DEFAULT_DUENOS];
     store.unidades = [...DEFAULT_UNIDADES];
     store.conductores = [...DEFAULT_CONDUCTORES];
-    store.bitacora_auditoria = [];
     save();
   }
 }
@@ -107,21 +183,14 @@ function save() {
 
 initStore();
 
-import { getClientGeoInfo, getDeviceInfo } from '../utils/ipTracker';
-import { cloudDb } from './cloudDb';
-import { cloudRelay } from './cloudRelay';
-
 export const api = {
   // ── Bitácora de Auditoría y Actividades de Usuarios ──────────────
   async registrarActividad(accion, detalle, categoria = 'captura', icono = '📝', usuarioCustom = null, seccionCustom = null) {
     const user = usuarioCustom || getActiveUser();
-    let geo = { ip: '189.203.112.45', ubicacion: 'Tlaxiaco, Oaxaca, MX', ciudad: 'Tlaxiaco', region: 'Oaxaca' };
-    try {
-      geo = await getClientGeoInfo();
-    } catch {}
-
+    const geo = getClientGeoInfoSync();
     const dispositivo = getDeviceInfo();
     const rutaActual = window.location.pathname;
+
     let seccion = seccionCustom || '📱 Captura Diaria';
     if (rutaActual.includes('/resumen')) seccion = '📊 Resumen de Planilla';
     else if (rutaActual.includes('/vueltas')) seccion = '🔄 Conteo de Vueltas';
@@ -379,7 +448,7 @@ export const api = {
 
   async eliminarRegistro(id) {
     const r = (store.registros || []).find(x => x && x.id === id);
-    store.registros = (store.registros || []).filter(x => x && x.id !== id);
+    store.registros = (store.registros || []).filter(r => r && r.id !== id);
     this.registrarActividad(
       'Eliminó registro de vuelta',
       `Unidad ${r?.numero_unidad || 'S/N'} (${r?.nombre_conductor || 'Chofer'}) del ${r?.fecha || 'Fecha'} · Monto: $${r?.total_neto || 0}`,
