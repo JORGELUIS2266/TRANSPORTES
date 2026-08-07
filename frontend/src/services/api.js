@@ -108,6 +108,7 @@ function save() {
 initStore();
 
 import { getClientIP, getDeviceInfo } from '../utils/ipTracker';
+import { cloudDb } from './cloudDb';
 
 export const api = {
   // ── Bitácora de Auditoría y Actividades de Usuarios ──────────────
@@ -148,6 +149,10 @@ export const api = {
       store.bitacora_auditoria = store.bitacora_auditoria.slice(0, 300);
     }
     save();
+
+    // Sincronizar en la nube en segundo plano
+    cloudDb.syncAuditLog(nuevoLog).catch(() => {});
+
     return nuevoLog;
   },
 
@@ -230,6 +235,7 @@ export const api = {
       this.registrarActividad('Modificó unidad', `Actualizó datos de la Unidad ${unidad.numero}`, 'catalogo', '✏️');
     }
     save();
+    cloudDb.syncUnidad(unidad).catch(() => {});
     return unidad;
   },
 
@@ -325,6 +331,7 @@ export const api = {
       );
     }
     save();
+    cloudDb.syncRegistro(rec).catch(() => {});
     return rec;
   },
 
