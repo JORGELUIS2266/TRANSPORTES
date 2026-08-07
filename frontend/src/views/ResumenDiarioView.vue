@@ -318,7 +318,22 @@ async function eliminar(id) {
 function exportarPDFClick()   { exportarPDF(registros.value,   semanaObj.value); }
 function exportarExcelClick() { exportarExcel(registros.value, semanaObj.value); }
 
-onMounted(cargar);
+import { onUnmounted } from 'vue';
+
+let liveInterval = null;
+
+onMounted(async () => {
+  await api.pullFullStoreFromCloud().catch(() => {});
+  await cargar();
+  liveInterval = setInterval(async () => {
+    await api.pullFullStoreFromCloud().catch(() => {});
+    await cargar();
+  }, 3500);
+});
+
+onUnmounted(() => {
+  if (liveInterval) clearInterval(liveInterval);
+});
 </script>
 
 <style scoped>

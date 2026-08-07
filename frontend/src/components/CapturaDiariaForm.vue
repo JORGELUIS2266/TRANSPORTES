@@ -724,7 +724,23 @@ async function vaciarSemana() {
   await cargar();
 }
 
-onMounted(cargar);
+import { onUnmounted } from 'vue';
+
+let liveInterval = null;
+
+onMounted(async () => {
+  await api.pullFullStoreFromCloud().catch(() => {});
+  await cargar();
+  // Sincronización continua de fondo para actualizar celulares y computadoras
+  liveInterval = setInterval(async () => {
+    await api.pullFullStoreFromCloud().catch(() => {});
+    await cargar();
+  }, 3500);
+});
+
+onUnmounted(() => {
+  if (liveInterval) clearInterval(liveInterval);
+});
 </script>
 
 <style scoped>
