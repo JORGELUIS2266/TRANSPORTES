@@ -101,6 +101,44 @@
         </div>
       </div>
 
+      <!-- ══════════════════════════════════════
+           BANNER DE VUELTAS PENDIENTES (ARRASTRE DE SEMANA ANTERIOR)
+      ══════════════════════════════════════ -->
+      <div v-if="pendientesArrastre.length > 0" class="arrastre-banner">
+        <div class="arrastre-header">
+          <span class="arrastre-icon">⚠️</span>
+          <div>
+            <strong class="arrastre-title">
+              Tienes {{ pendientesArrastre.length }} vuelta(s) PENDIENTE(s) arrastrada(s) de la semana anterior
+            </strong>
+            <p class="arrastre-desc">
+              Estas vueltas no se contabilizaron en el corte pasado. Al completarlas aquí, su dinero entrará al corte de <strong>la semana que estás viendo ahora</strong>.
+            </p>
+          </div>
+        </div>
+        <div class="arrastre-list">
+          <div v-for="r in pendientesArrastre" :key="r.id" class="arrastre-item">
+            <div class="arrastre-item-info">
+              <strong>🚐 Unidad {{ r.numero_unidad }}</strong>
+              <span class="arrastre-chofer">{{ r.nombre_conductor }}</span>
+              <span class="arrastre-fecha">Fecha original: {{ formatFechaLarga(r.fecha) }}</span>
+              <span class="arrastre-montos">
+                Ingreso: <strong>${{ Number(r.total_generado || 0).toFixed(2) }}</strong> ·
+                Comb: <strong>${{ Number(r.combustible || 0).toFixed(2) }}</strong> ·
+                Neto: <strong>${{ Number(r.total_neto || 0).toFixed(2) }}</strong>
+              </span>
+            </div>
+            <button
+              @click="completarArrastre(r.id)"
+              class="btn btn-arrastre"
+              :disabled="completandoArrastre[r.id]"
+            >
+              {{ completandoArrastre[r.id] ? '⏳ Procesando...' : '✅ Completar y mover a esta Semana' }}
+            </button>
+          </div>
+        </div>
+      </div>
+
       <!-- PANEL GLOBAL DE TOTALES DE SEMANA -->
       <div class="resumen-global-panel" v-if="registros.length > 0">
         <div class="rg-title">📈 Totales de la {{ semanaObj?.label || 'Semana Actual' }}</div>
@@ -235,16 +273,39 @@ const semanasDisponibles = ref(getSemanasSelectRecentFirst() || []);
 const semanaId = ref(api.getSemanaActiva() || getSemanaActualId());
 const semanaObj = computed(() => (semanasDisponibles.value || []).find(s => s && s.id === semanaId.value) || semanasDisponibles.value[0] || null);
 
-const registros = ref([]);
+const registros          = ref([]);
+const pendientesArrastre = ref([]);
+const completandoArrastre = ref({});
 const editando  = ref(false);
 const formEdit  = ref({});
 
 async function cargar() {
   try {
     registros.value = await api.getRegistrosDeSemana(semanaId.value);
+    // Cargar pendientes de la semana ANTERIOR para mostrar el banner de arrastre
+    const semAntId = getSemanaAnteriorId(semanaId.value);
+    if (semAntId) {
+      pendientesArrastre.value = await api.getPendientesArrastre(semAntId).catch(() => []);
+    } else {
+      pendientesArrastre.value = [];
+    }
   } catch (e) {
     console.error('[Resumen] Error cargando:', e);
     registros.value = [];
+    pendientesArrastre.value = [];
+  }
+}
+
+async function completarArrastre(id) {
+  if (!confirm('¿Completar esta vuelta pendiente y moverla a la semana actual?\n\nSu ingreso, combustible y ganancia entrarán en el corte de esta semana.')) return;
+  completandoArrastre.value[id] = true;
+  try {
+    await api.completarArrastre(id, semanaId.value);
+    await cargar();
+  } catch (e) {
+    alert('Error al completar el arrastre: ' + e.message);
+  } finally {
+    completandoArrastre.value[id] = false;
   }
 }
 
@@ -349,6 +410,82 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
+/* ── Banner de Arrastre de Pendientes ──────────────────── */
+.arrastre-banner {
+  background: #fffbeb;
+  border: 2px solid #f59e0b;
+  border-left: 6px solid #f59e0b;
+  border-radius: 12px;
+  padding: 1.25rem 1.5rem;
+  margin-bottom: 1.25rem;
+  box-shadow: 0 4px 12px rgba(245, 158, 11, 0.15);
+}
+
+.arrastre-header {
+  display: flex;
+  gap: 0.75rem;
+  align-items: flex-start;
+  margin-bottom: 1rem;
+}
+
+.arrastre-icon { font-size: 1.75rem; flex-shrink: 0; }
+
+.arrastre-title {
+  font-size: 1rem;
+  font-weight: 900;
+  color: #92400e;
+}
+
+.arrastre-desc {
+  font-size: 0.8rem;
+  color: #78350f;
+  margin: 0.25rem 0 0;
+}
+
+.arrastre-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.arrastre-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid #fde68a;
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.arrastre-item-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.arrastre-chofer { font-size: 0.82rem; color: #92400e; font-weight: 700; }
+.arrastre-fecha  { font-size: 0.75rem; color: #a16207; }
+.arrastre-montos { font-size: 0.78rem; color: #78350f; }
+
+.btn-arrastre {
+  background: #16a34a;
+  color: #ffffff;
+  border: none;
+  font-weight: 900;
+  font-size: 0.82rem;
+  padding: 0.5rem 1rem;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.15s;
+  white-space: nowrap;
+}
+.btn-arrastre:hover    { background: #15803d; }
+.btn-arrastre:disabled { background: #6b7280; cursor: not-allowed; }
+
+
 .brand-hero-card {
   display: flex;
   align-items: center;

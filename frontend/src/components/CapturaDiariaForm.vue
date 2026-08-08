@@ -259,9 +259,23 @@
             class="btn btn-red btn-lg btn-block-mobile"
             :disabled="isSubmitting"
           >
-            💾 Guardar Vuelta del Día
+            💾 Guardar COMPLETADO
+          </button>
+
+          <button
+            type="button"
+            @click="guardarConEstado('pendiente')"
+            class="btn btn-pending btn-lg btn-block-mobile"
+            :disabled="isSubmitting"
+            title="La vuelta quedará registrada pero sin cerrar. El dinero NO se suma al corte de esta semana."
+          >
+            ⏳ Guardar como PENDIENTE
           </button>
         </div>
+        <p class="pending-hint">
+          ⏳ <strong>PENDIENTE:</strong> El ingreso, combustible y ganancia de esta vuelta <strong>NO se contabilizarán</strong>
+          en el corte de la semana actual. Cuando el chofer liquide, complétala desde la vista de <strong>📊 Resumen</strong>.
+        </p>
 
       </form>
     </div>
@@ -325,7 +339,8 @@
             </tr>
           </thead>
           <tbody>
-            <tr v-for="(r, idx) in registrosDelDia" :key="r.id">
+            <tr v-for="(r, idx) in registrosDelDia" :key="r.id"
+                :class="r.estado === 'pendiente' ? 'fila-pendiente' : ''">
               <td class="row-index">{{ idx + 1 }}</td>
               <td>
                 <div class="unit-cond-box">
@@ -333,21 +348,33 @@
                   <span class="driver-tag">{{ r.nombre_conductor }}</span>
                 </div>
               </td>
-              <td class="text-right font-mono">${{ Number(r.bitacora_tlaxiaco_putla || 0).toFixed(2) }}</td>
-              <td class="text-right font-mono">${{ Number(r.bitacora_putla_tlaxiaco || 0).toFixed(2) }}</td>
-              <td class="text-right font-mono">${{ Number(r.intermedios || 0).toFixed(2) }}</td>
-              <td class="text-right font-mono font-bold">${{ Number(r.total_generado || 0).toFixed(2) }}</td>
-              <td class="text-right font-mono" style="color:#d97706;">${{ Number(r.combustible || 0).toFixed(2) }}</td>
-              <td class="text-right font-mono font-bold" :class="Number(r.total_neto || 0) < 0 ? 'text-red' : 'text-green'">
-                ${{ Number(r.total_neto || 0).toFixed(2) }}
+              <!-- Si está PENDIENTE mostramos los datos pero con aviso visual -->
+              <td class="text-right font-mono" :class="r.estado === 'pendiente' ? 'cell-pending' : ''">
+                {{ r.estado === 'pendiente' ? '—' : '$' + Number(r.bitacora_tlaxiaco_putla || 0).toFixed(2) }}
+              </td>
+              <td class="text-right font-mono" :class="r.estado === 'pendiente' ? 'cell-pending' : ''">
+                {{ r.estado === 'pendiente' ? '—' : '$' + Number(r.bitacora_putla_tlaxiaco || 0).toFixed(2) }}
+              </td>
+              <td class="text-right font-mono" :class="r.estado === 'pendiente' ? 'cell-pending' : ''">
+                {{ r.estado === 'pendiente' ? '—' : '$' + Number(r.intermedios || 0).toFixed(2) }}
+              </td>
+              <td class="text-right font-mono font-bold" :class="r.estado === 'pendiente' ? 'cell-pending' : ''">
+                {{ r.estado === 'pendiente' ? '— (no contabilizado)' : '$' + Number(r.total_generado || 0).toFixed(2) }}
+              </td>
+              <td class="text-right font-mono" :class="r.estado === 'pendiente' ? 'cell-pending' : ''"
+                  :style="r.estado !== 'pendiente' ? 'color:#d97706;' : ''">
+                {{ r.estado === 'pendiente' ? '—' : '$' + Number(r.combustible || 0).toFixed(2) }}
+              </td>
+              <td class="text-right font-mono font-bold"
+                  :class="r.estado === 'pendiente' ? 'cell-pending' : (Number(r.total_neto || 0) < 0 ? 'text-red' : 'text-green')">
+                {{ r.estado === 'pendiente' ? '—' : '$' + Number(r.total_neto || 0).toFixed(2) }}
               </td>
               <td style="text-align:center;">
-                <span class="badge badge-success">✅ LISTO</span>
+                <span v-if="r.estado === 'pendiente'" class="badge badge-warning">⏳ PENDIENTE</span>
+                <span v-else class="badge badge-success">✅ LISTO</span>
               </td>
               <td v-if="auth.isAdmin" style="text-align:center;">
-                <button @click="eliminar(r.id)" class="btn btn-sm btn-delete" title="Eliminar registro">
-                  🗑️
-                </button>
+                <button @click="eliminar(r.id)" class="btn btn-sm btn-delete" title="Eliminar registro">🗑️</button>
               </td>
             </tr>
           </tbody>
@@ -438,13 +465,15 @@ const registrosDelDia = computed(() => {
   return (registros.value || []).filter(r => r && r.fecha === f);
 });
 
-// Totales calculados solo para el día seleccionado
-const sumB1Dia    = computed(() => registrosDelDia.value.reduce((acc, r) => acc + (Number(r.bitacora_tlaxiaco_putla) || 0), 0));
-const sumB2Dia    = computed(() => registrosDelDia.value.reduce((acc, r) => acc + (Number(r.bitacora_putla_tlaxiaco) || 0), 0));
-const sumInterDia = computed(() => registrosDelDia.value.reduce((acc, r) => acc + (Number(r.intermedios) || 0), 0));
-const sumGenDia   = computed(() => registrosDelDia.value.reduce((acc, r) => acc + (Number(r.total_generado) || 0), 0));
-const sumCombDia  = computed(() => registrosDelDia.value.reduce((acc, r) => acc + (Number(r.combustible) || 0), 0));
-const sumNetoDia  = computed(() => registrosDelDia.value.reduce((acc, r) => acc + (Number(r.total_neto) || 0), 0));
+// Totales del día — SOLO cuentan los COMPLETADOS (los pendientes no entran al corte)
+const completadosDelDia = computed(() => registrosDelDia.value.filter(r => r.estado === 'completado'));
+const pendientesDelDia  = computed(() => registrosDelDia.value.filter(r => r.estado === 'pendiente'));
+const sumB1Dia    = computed(() => completadosDelDia.value.reduce((acc, r) => acc + (Number(r.bitacora_tlaxiaco_putla) || 0), 0));
+const sumB2Dia    = computed(() => completadosDelDia.value.reduce((acc, r) => acc + (Number(r.bitacora_putla_tlaxiaco) || 0), 0));
+const sumInterDia = computed(() => completadosDelDia.value.reduce((acc, r) => acc + (Number(r.intermedios) || 0), 0));
+const sumGenDia   = computed(() => completadosDelDia.value.reduce((acc, r) => acc + (Number(r.total_generado) || 0), 0));
+const sumCombDia  = computed(() => completadosDelDia.value.reduce((acc, r) => acc + (Number(r.combustible) || 0), 0));
+const sumNetoDia  = computed(() => completadosDelDia.value.reduce((acc, r) => acc + (Number(r.total_neto) || 0), 0));
 
 // Totales reactivos del formulario
 const totalGeneradoCalc = computed(() => {
@@ -829,7 +858,50 @@ onUnmounted(() => {
 
 .form-submit-row {
   display: flex;
+  gap: 0.75rem;
   justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+/* Botón guardar PENDIENTE */
+.btn-pending {
+  background: #fffbeb;
+  color: #92400e;
+  border: 2px solid #f59e0b;
+  font-weight: 900;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s;
+  padding: 0.55rem 1.25rem;
+  font-size: 0.9rem;
+}
+.btn-pending:hover { background: #fef3c7; border-color: #d97706; }
+.btn-pending:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* Nota explicativa debajo de los botones */
+.pending-hint {
+  margin-top: 0.5rem;
+  font-size: 0.78rem;
+  color: #92400e;
+  background: #fffbeb;
+  border: 1px solid #f59e0b;
+  border-left: 4px solid #f59e0b;
+  padding: 0.5rem 0.85rem;
+  border-radius: 6px;
+}
+
+/* Fila amarilla para vueltas pendientes en la tabla */
+.fila-pendiente {
+  background: #fffbeb !important;
+  border-left: 4px solid #f59e0b;
+}
+.fila-pendiente td { color: #92400e; }
+
+/* Celda con guión para montos pendientes */
+.cell-pending {
+  color: #d97706 !important;
+  font-style: italic;
+  opacity: 0.7;
 }
 
 /* ── Tabla del Día ───────────────────────────────── */
