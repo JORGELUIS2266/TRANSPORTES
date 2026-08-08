@@ -1,24 +1,30 @@
 <template>
   <header class="header">
     <div class="header-content">
+      <!-- ── Logo y Nombre Oficial de la Empresa ────────────────── -->
       <div class="brand">
-        <span class="brand-icon">🚌</span>
-        <div>
-          <h1 class="brand-title">TRANSPORTE TIERRA DE HUMOS</h1>
-          <span class="brand-subtitle">Ruta Oficial: Tlaxiaco ➔ Putla</span>
+        <img src="/logo_th_circle.jpg" alt="Logo TH" class="brand-logo-img" />
+        <div class="brand-text-box">
+          <h1 class="brand-title">TRANSPORTE TIERRA DE HUMO</h1>
+          <span class="brand-corp">S.C. DE R.L. DE C.V.</span>
+          <div class="brand-subtitle">
+            <span class="service-tag">PASAJE · PAQUETERÍA · TURISMO</span>
+            <span class="route-badge">Tlaxiaco ⇄ Putla</span>
+          </div>
         </div>
       </div>
 
+      <!-- ── Navegación Principal ──────────────────────────────── -->
       <nav class="nav-links">
-        <router-link to="/"                  class="nav-item">📱 Captura</router-link>
-        <router-link to="/resumen"           class="nav-item">📊 Resumen</router-link>
+        <router-link to="/"                  class="nav-item">📱 Captura del Día</router-link>
+        <router-link to="/resumen"           class="nav-item">📊 Resumen Semanal</router-link>
         <router-link to="/vueltas"           class="nav-item">🔄 Vueltas</router-link>
         <router-link to="/unidades"          class="nav-item">🚐 Unidades</router-link>
         <router-link to="/exportar"          class="nav-item">📄 Exportar</router-link>
         <router-link v-if="auth.isAdmin" to="/bitacora" class="nav-item">📜 Bitácora</router-link>
       </nav>
 
-      <!-- Panel de Usuario y Rol -->
+      <!-- ── Panel de Usuario y Rol ────────────────────────────── -->
       <div class="user-session-box" v-if="auth.currentUser">
         <div class="user-info">
           <span class="user-name">{{ auth.currentUser.nombre }}</span>
@@ -28,15 +34,6 @@
         </div>
 
         <div class="user-actions">
-          <button
-            @click="sincronizarNubeManual"
-            class="btn-nav-action btn-cloud-sync"
-            :class="{ 'is-spinning': sincronizando }"
-            title="Sincronizar datos con todos los dispositivos en tiempo real"
-          >
-            ☁️ {{ sincronizando ? 'Sincronizando...' : 'Nube Conectada' }}
-          </button>
-
           <button
             v-if="auth.isAdmin"
             @click="auth.showUserAdminModal = true"
@@ -90,59 +87,121 @@ function getBadgeClass(rol) {
 <style scoped>
 .header {
   background: #ffffff;
-  border-bottom: 3px solid var(--accent-red);
-  padding: 0.75rem 1.5rem;
+  border-bottom: 2.5px solid #dc2626;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.06);
   position: sticky;
   top: 0;
   z-index: 100;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
 }
 
 .header-content {
-  max-width: 1800px;
+  max-width: 1750px;
   margin: 0 auto;
+  padding: 0.65rem 1.25rem;
   display: flex;
-  align-items: center;
   justify-content: space-between;
+  align-items: center;
   gap: 1rem;
   flex-wrap: wrap;
 }
 
-.brand { display: flex; align-items: center; gap: 0.75rem; }
-.brand-icon  { font-size: 2.2rem; }
+/* ── Brand & Logo Oficial ────────────────────────── */
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  text-decoration: none;
+}
+
+.brand-logo-img {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid #dc2626;
+  box-shadow: 0 2px 8px rgba(220, 38, 38, 0.2);
+}
+
+.brand-text-box {
+  display: flex;
+  flex-direction: column;
+}
+
 .brand-title {
-  font-size: 1.1rem;
-  font-weight: 800;
-  color: var(--accent-red);
+  font-size: 1.05rem;
+  font-weight: 900;
+  color: #dc2626;
   margin: 0;
+  line-height: 1.15;
   letter-spacing: -0.01em;
 }
-.brand-subtitle { font-size: 0.75rem; color: var(--text-muted); font-weight: 700; }
 
-.nav-links { display: flex; gap: 0.4rem; flex-wrap: wrap; align-items: center; }
+.brand-corp {
+  font-size: 0.68rem;
+  font-weight: 800;
+  color: #0f172a;
+  letter-spacing: 0.05em;
+  margin-top: 0.05rem;
+}
+
+.brand-subtitle {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: #64748b;
+  margin-top: 0.15rem;
+  flex-wrap: wrap;
+}
+
+.service-tag {
+  color: #475569;
+  letter-spacing: 0.03em;
+}
+
+.route-badge {
+  background: #fef2f2;
+  color: #dc2626;
+  border: 1px solid #fca5a5;
+  padding: 0.05rem 0.4rem;
+  border-radius: 4px;
+  font-weight: 800;
+  font-size: 0.65rem;
+}
+
+/* ── Nav Links ───────────────────────────────────── */
+.nav-links {
+  display: flex;
+  gap: 0.35rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
 
 .nav-item {
-  color: var(--text-muted);
+  color: #475569;
   text-decoration: none;
-  font-weight: 700;
-  font-size: 0.84rem;
-  padding: 0.5rem 0.85rem;
+  font-size: 0.82rem;
+  font-weight: 800;
+  padding: 0.45rem 0.8rem;
   border-radius: 8px;
-  transition: all 0.18s ease;
+  transition: all 0.15s ease;
+  border: 1px solid transparent;
+}
+
+.nav-item:hover {
   background: #f1f5f9;
-  border: 1px solid var(--border-color);
-  white-space: nowrap;
+  color: #0f172a;
 }
 
-.nav-item:hover,
-.router-link-exact-active {
-  color: #ffffff;
-  background: linear-gradient(135deg, #dc2626, #b91c1c);
-  border-color: #dc2626;
-  box-shadow: 0 4px 12px rgba(220, 38, 38, 0.25);
+.nav-item.router-link-active {
+  background: #dc2626;
+  color: #ffffff !important;
+  font-weight: 900;
+  box-shadow: 0 2px 8px rgba(220, 38, 38, 0.3);
 }
 
-/* ── Panel de Usuario ──────────────────────────────── */
+/* ── User Box ────────────────────────────────────── */
 .user-session-box {
   display: flex;
   align-items: center;
@@ -163,67 +222,60 @@ function getBadgeClass(rol) {
   font-size: 0.78rem;
   font-weight: 800;
   color: #0f172a;
-  white-space: nowrap;
 }
 
 .user-badge {
   font-size: 0.65rem;
-  font-weight: 800;
-  padding: 0.1rem 0.45rem;
-  border-radius: 12px;
-  letter-spacing: 0.03em;
+  font-weight: 900;
+  padding: 0.08rem 0.4rem;
+  border-radius: 10px;
+  margin-top: 0.1rem;
 }
 
-.badge-role-admin {
-  background: #fef2f2;
-  color: #dc2626;
-  border: 1px solid #fca5a5;
-}
-
-.badge-role-capturista {
-  background: #f0f9ff;
-  color: #0284c7;
-  border: 1px solid #bae6fd;
-}
-
-.badge-role-lector {
-  background: #f0fdf4;
-  color: #16a34a;
-  border: 1px solid #bbf7d0;
-}
+.badge-role-admin { background: #fee2e2; color: #dc2626; border: 1px solid #fca5a5; }
+.badge-role-capturista { background: #e0f2fe; color: #0284c7; border: 1px solid #7dd3fc; }
+.badge-role-lector { background: #dcfce7; color: #16a34a; border: 1px solid #86efac; }
 
 .user-actions {
   display: flex;
   gap: 0.35rem;
+  align-items: center;
 }
 
 .btn-nav-action {
-  font-size: 0.75rem;
-  font-weight: 700;
-  padding: 0.35rem 0.6rem;
+  font-size: 0.74rem;
+  font-weight: 800;
+  padding: 0.3rem 0.6rem;
   border-radius: 6px;
-  border: 1px solid #cbd5e1;
-  background: white;
   cursor: pointer;
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
   transition: all 0.15s;
-  white-space: nowrap;
 }
 
-.btn-admin-users:hover {
+.btn-admin-users {
+  color: #4338ca;
+  background: #eef2ff;
+  border-color: #c7d2fe;
+}
+.btn-admin-users:hover { background: #e0e7ff; }
+
+.btn-logout {
+  color: #991b1b;
   background: #fef2f2;
-  color: #dc2626;
-  border-color: #fca5a5;
+  border-color: #fecaca;
 }
+.btn-logout:hover { background: #fee2e2; }
 
-.btn-logout:hover {
-  background: #fee2e2;
-  color: #b91c1c;
-  border-color: #ef4444;
-}
-
-@media (max-width: 960px) {
-  .header-content { flex-direction: column; align-items: flex-start; }
-  .nav-links { width: 100%; overflow-x: auto; padding-bottom: 0.25rem; }
-  .user-session-box { width: 100%; justify-content: space-between; }
+@media (max-width: 900px) {
+  .header-content {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.6rem;
+  }
+  .brand { justify-content: center; text-align: center; }
+  .brand-text-box { align-items: center; }
+  .nav-links { justify-content: center; }
+  .user-session-box { justify-content: space-between; }
 }
 </style>

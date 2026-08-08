@@ -1,12 +1,13 @@
 <template>
   <div v-if="!auth.isAuthenticated" class="login-fullscreen">
     <div class="login-box-card">
-      <!-- Encabezado de la Empresa -->
+      <!-- Encabezado con Logo Oficial de la Empresa -->
       <div class="login-header">
-        <div class="login-brand-icon">🚌</div>
-        <h1 class="login-brand-title">TRANSPORTE TIERRA DE HUMOS</h1>
-        <p class="login-route">Ruta Oficial: Tlaxiaco ➔ Putla</p>
-        <div class="login-badge">SISTEMA OPERATIVO & CONTROL DE RUTAS</div>
+        <img src="/logo_th_circle.jpg" alt="Logo Transporte Tierra de Humo" class="login-logo-circle" />
+        <h1 class="login-brand-title">TRANSPORTE TIERRA DE HUMO</h1>
+        <span class="login-corp-subtitle">S.C. DE R.L. DE C.V.</span>
+        <p class="login-services">PASAJE · PAQUETERÍA · TURISMO</p>
+        <div class="login-badge-route">Ruta Oficial: Tlaxiaco ⇄ Putla</div>
       </div>
 
       <!-- Formulario de Acceso Seguro -->
@@ -57,12 +58,15 @@
         </button>
       </form>
 
-      <!-- Pie de Seguridad Criptográfica -->
-      <div class="login-footer-security">
-        <span class="sec-icon">🔒</span>
-        <span>Acceso protegido con cifrado criptográfico SHA-256.</span>
+      <!-- Pie de Seguridad y Soporte -->
+      <div class="login-footer">
+        <div class="security-info">
+          🔒 Acceso cifrado en tiempo real conectado a Supabase Cloud
+        </div>
+        <small class="company-legal">
+          Transporte Tierra de Humo S.C. de R.L. de C.V. · Tlaxiaco - Putla Villa de Guerrero, Oaxaca
+        </small>
       </div>
-
     </div>
   </div>
 </template>
@@ -86,7 +90,7 @@ async function submitLogin() {
     username.value = '';
     password.value = '';
   } catch (e) {
-    errorMsg.value = e.message;
+    errorMsg.value = e.message || 'Error de autenticación.';
   } finally {
     cargando.value = false;
   }
@@ -97,7 +101,7 @@ async function submitLogin() {
 .login-fullscreen {
   position: fixed;
   top: 0; left: 0; right: 0; bottom: 0;
-  background: radial-gradient(circle at center, #1e293b 0%, #0f172a 100%);
+  background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #0f172a 100%);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -110,56 +114,73 @@ async function submitLogin() {
   border-radius: 20px;
   max-width: 440px;
   width: 100%;
-  padding: 2.5rem 2rem;
-  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.6);
-  border-top: 6px solid var(--accent-red);
+  padding: 2.25rem 2rem;
+  box-shadow: 0 25px 60px -15px rgba(0, 0, 0, 0.6);
+  border: 2px solid #fee2e2;
 }
 
 .login-header {
   text-align: center;
-  margin-bottom: 2rem;
+  margin-bottom: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
 }
 
-.login-brand-icon {
-  font-size: 3.2rem;
-  margin-bottom: 0.25rem;
+.login-logo-circle {
+  width: 76px;
+  height: 76px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 3px solid #dc2626;
+  box-shadow: 0 4px 15px rgba(220, 38, 38, 0.25);
+  margin-bottom: 0.75rem;
 }
 
 .login-brand-title {
-  color: var(--accent-red);
   font-size: 1.25rem;
   font-weight: 900;
+  color: #dc2626;
   margin: 0;
   letter-spacing: -0.01em;
 }
 
-.login-route {
-  color: #475569;
-  font-size: 0.88rem;
-  font-weight: 700;
-  margin: 0.25rem 0 0.6rem;
+.login-corp-subtitle {
+  font-size: 0.76rem;
+  font-weight: 800;
+  color: #0f172a;
+  letter-spacing: 0.06em;
+  margin-top: 0.1rem;
 }
 
-.login-badge {
-  display: inline-block;
-  background: #fee2e2;
-  color: #dc2626;
-  font-size: 0.7rem;
-  font-weight: 800;
-  padding: 0.25rem 0.85rem;
-  border-radius: 20px;
+.login-services {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #64748b;
+  margin: 0.2rem 0 0.5rem;
   letter-spacing: 0.04em;
+}
+
+.login-badge-route {
+  display: inline-block;
+  background: #fff5f5;
+  color: #dc2626;
+  border: 1px solid #fca5a5;
+  padding: 0.2rem 0.75rem;
+  border-radius: 20px;
+  font-size: 0.74rem;
+  font-weight: 800;
 }
 
 .login-form {
   display: flex;
   flex-direction: column;
-  gap: 1.25rem;
+  gap: 1rem;
 }
 
 .login-input {
-  font-size: 1rem;
-  padding: 0.75rem 0.95rem;
+  font-size: 0.95rem;
+  padding: 0.65rem 0.85rem;
   border-radius: 8px;
 }
 
@@ -170,56 +191,57 @@ async function submitLogin() {
 }
 
 .password-wrapper input {
+  width: 100%;
   padding-right: 2.75rem;
 }
 
 .btn-toggle-pass {
   position: absolute;
-  right: 0.6rem;
+  right: 0.75rem;
   background: none;
   border: none;
-  font-size: 1.15rem;
   cursor: pointer;
-  padding: 0.3rem;
-  color: #64748b;
+  font-size: 1.1rem;
+  padding: 0;
 }
 
 .btn-login-submit {
-  font-size: 1rem;
-  font-weight: 800;
-  padding: 0.85rem 1.25rem;
+  font-size: 0.95rem;
+  padding: 0.75rem;
+  border-radius: 10px;
+  font-weight: 900;
   margin-top: 0.5rem;
-  box-shadow: 0 4px 14px rgba(220, 38, 38, 0.35);
-  border-radius: 8px;
+  letter-spacing: 0.02em;
 }
 
 .alert-error {
   background: #fef2f2;
   border: 1px solid #fca5a5;
   color: #dc2626;
-  padding: 0.65rem 0.85rem;
-  border-radius: 6px;
-  font-size: 0.85rem;
+  padding: 0.6rem 0.85rem;
+  border-radius: 8px;
+  font-size: 0.82rem;
   font-weight: 700;
-  text-align: center;
 }
 
-.login-footer-security {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.4rem;
-  margin-top: 2rem;
+.login-footer {
+  text-align: center;
+  margin-top: 1.5rem;
   padding-top: 1.25rem;
   border-top: 1px solid #e2e8f0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.security-info {
   font-size: 0.74rem;
-  color: #64748b;
-  font-weight: 600;
+  color: #059669;
+  font-weight: 800;
 }
 
-.sec-icon {
-  font-size: 0.9rem;
+.company-legal {
+  font-size: 0.68rem;
+  color: #94a3b8;
 }
-
-.req { color: #dc2626; }
 </style>

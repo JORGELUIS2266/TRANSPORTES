@@ -33,8 +33,9 @@ export function exportarExcel(registros, semana) {
   fechas.forEach(fecha => {
     const fechaTxt = formatFechaLarga(fecha);
     const datosDia = [
-      ['TRANSPORTE TIERRA DE HUMOS'],
-      [`RUTA: TLAXIACO ➔ PUTLA  |  ${semanaLabel}`],
+      ['TRANSPORTE TIERRA DE HUMO S.C. DE R.L. DE C.V.'],
+      ['PASAJE - PAQUETERIA - TURISMO  |  RUTA: TLAXIACO ⇄ PUTLA'],
+      [`PLANILLA SEMANAL: ${semanaLabel}`],
       [],
       ['FECHA', fechaTxt],
       [],

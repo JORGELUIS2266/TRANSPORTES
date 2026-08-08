@@ -38,11 +38,11 @@ export function exportarPDF(registros, semana) {
 
     const fechaTxt = formatFechaLarga(fecha);
 
-    // Sub-cabecera empresa
+    // Sub-cabecera oficial de la empresa
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(8);
-    doc.setTextColor(150, 150, 150);
-    doc.text(`TRANSPORTE TIERRA DE HUMOS  |  ${semanaLabel}  |  TLAXIACO ➔ PUTLA`, PW / 2, 6, { align: 'center' });
+    doc.setTextColor(180, 0, 0);
+    doc.text(`TRANSPORTE TIERRA DE HUMO S.C. DE R.L. DE C.V.  |  PASAJE · PAQUETERÍA · TURISMO  |  RUTA: TLAXIACO ⇄ PUTLA`, PW / 2, 6, { align: 'center' });
     doc.setTextColor(0, 0, 0);
 
     // Recuadro de fecha estilo planilla física

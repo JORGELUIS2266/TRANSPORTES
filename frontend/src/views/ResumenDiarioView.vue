@@ -65,14 +65,26 @@
     </div>
 
     <!-- ══════════════════════════════════════
-         CABECERA CON SELECTOR DE SEMANA
+         BANNER OFICIAL Y SELECTOR DE SEMANA
     ══════════════════════════════════════ -->
+    <div class="brand-hero-card">
+      <img src="/logo_tierra_de_humo.jpg" alt="Logo TH" class="hero-logo-img" />
+      <div class="hero-text-box">
+        <h2 class="hero-company-title">TRANSPORTE TIERRA DE HUMO</h2>
+        <span class="hero-company-corp">S.C. DE R.L. DE C.V.</span>
+        <div class="hero-route-tag">
+          <span>PASAJE · PAQUETERÍA · TURISMO</span>
+          <strong class="route-pill">Ruta Oficial: Tlaxiaco ⇄ Putla</strong>
+        </div>
+      </div>
+    </div>
+
     <div class="card">
       <div class="card-header-box">
         <div>
           <h2 style="color:var(--accent-red); font-size:1.2rem;">📊 Resumen de Planilla Semanal</h2>
           <p style="font-size:0.83rem; color:var(--text-muted);">
-            Planilla por semana con totales diarios y globales. Edita o elimina cualquier registro.
+            Planilla completa con totales diarios y globales de la semana. Edita o elimina registros.
           </p>
         </div>
         <div class="header-actions">
@@ -337,6 +349,24 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
+.brand-hero-card {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+  background: linear-gradient(135deg, #ffffff, #fff5f5);
+  border: 2px solid #dc2626;
+  border-radius: 14px;
+  padding: 1rem 1.5rem;
+  margin-bottom: 1.25rem;
+  box-shadow: 0 4px 15px rgba(220, 38, 38, 0.08);
+}
+.hero-logo-img { width: 150px; height: auto; max-height: 55px; object-fit: contain; }
+.hero-text-box { display: flex; flex-direction: column; }
+.hero-company-title { margin: 0; font-size: 1.25rem; font-weight: 900; color: #dc2626; letter-spacing: -0.01em; }
+.hero-company-corp { font-size: 0.78rem; font-weight: 800; color: #0f172a; letter-spacing: 0.06em; }
+.hero-route-tag { display: flex; align-items: center; gap: 0.6rem; font-size: 0.74rem; font-weight: 700; color: #64748b; margin-top: 0.2rem; flex-wrap: wrap; }
+.route-pill { background: #fef2f2; color: #dc2626; border: 1px solid #fca5a5; padding: 0.1rem 0.45rem; border-radius: 6px; }
+
 .header-actions { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
 .btn-nav-week-sm {
   background: #fef2f2;
