@@ -21,7 +21,8 @@
         <router-link to="/vueltas"           class="nav-item">🔄 Vueltas</router-link>
         <router-link to="/unidades"          class="nav-item">🚐 Unidades</router-link>
         <router-link to="/exportar"          class="nav-item">📄 Exportar</router-link>
-        <router-link v-if="auth.isAdmin" to="/bitacora" class="nav-item">📜 Bitácora</router-link>
+        <router-link v-if="auth.isAdmin" to="/liquidacion" class="nav-item nav-item-liq">💰 Liquidación</router-link>
+        <router-link v-if="auth.isAdmin" to="/bitacora"    class="nav-item">📜 Bitácora</router-link>
       </nav>
 
       <!-- ── Panel de Usuario y Rol ────────────────────────────── -->
@@ -266,6 +267,21 @@ function getBadgeClass(rol) {
   border-color: #fecaca;
 }
 .btn-logout:hover { background: #fee2e2; }
+
+/* Botón Liquidación — dorado para destacar que es exclusivo del admin */
+.nav-item-liq {
+  background: #fffbeb !important;
+  color: #92400e !important;
+  border: 1px solid #f59e0b !important;
+  font-weight: 900 !important;
+}
+.nav-item-liq:hover { background: #fef3c7 !important; }
+.nav-item-liq.router-link-active {
+  background: #f59e0b !important;
+  color: #ffffff !important;
+  border-color: #d97706 !important;
+  box-shadow: 0 2px 8px rgba(245, 158, 11, 0.4) !important;
+}
 
 @media (max-width: 900px) {
   .header-content {

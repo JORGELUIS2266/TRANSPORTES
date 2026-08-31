@@ -5,14 +5,16 @@ import VueltasView           from '../views/VueltasView.vue'
 import ExportarView          from '../views/ExportarView.vue'
 import UnidadesView          from '../views/UnidadesView.vue'
 import BitacoraAuditoriaView from '../views/BitacoraAuditoriaView.vue'
+import LiquidacionView       from '../views/LiquidacionView.vue'
 
 const routes = [
-  { path: '/',          name: 'captura',   component: CapturaView },
-  { path: '/resumen',   name: 'resumen',   component: ResumenDiarioView },
-  { path: '/vueltas',   name: 'vueltas',   component: VueltasView },
-  { path: '/unidades',  name: 'unidades',  component: UnidadesView },
-  { path: '/exportar',  name: 'exportar',  component: ExportarView },
-  { path: '/bitacora',  name: 'bitacora',  component: BitacoraAuditoriaView }
+  { path: '/',             name: 'captura',     component: CapturaView },
+  { path: '/resumen',      name: 'resumen',     component: ResumenDiarioView },
+  { path: '/vueltas',      name: 'vueltas',     component: VueltasView },
+  { path: '/unidades',     name: 'unidades',    component: UnidadesView },
+  { path: '/exportar',     name: 'exportar',    component: ExportarView },
+  { path: '/bitacora',     name: 'bitacora',    component: BitacoraAuditoriaView },
+  { path: '/liquidacion',  name: 'liquidacion', component: LiquidacionView }
 ]
 
 const router = createRouter({
