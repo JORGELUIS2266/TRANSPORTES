@@ -87,7 +87,7 @@
         <!-- Totales de la semana -->
         <div class="totales-resumen-bar">
           <div class="total-item">
-            <span class="total-label">📋 Total Bitácora (vueltas completadas):</span>
+            <span class="total-label">📋 Total Neto de la semana (generado − combustible):</span>
             <strong class="total-value">${{ totalBitacora.toFixed(2) }}</strong>
           </div>
           <div class="total-item" v-if="totalExtras > 0">
@@ -192,11 +192,11 @@
         <!-- Pie de cálculo (igual que en el cuaderno) -->
         <div class="pie-calculo">
           <div class="pie-item">
-            <span class="pie-label">Vueltas totales:</span>
-            <strong class="pie-val">{{ totalVueltas }}</strong>
+            <span class="pie-label">Total Neto de vueltas:</span>
+            <strong class="pie-val">${{ granTotal.toFixed(2) }}</strong>
           </div>
           <div class="pie-item">
-            <span class="pie-label">Bitácora ${{ granTotal.toFixed(2) }} ÷ {{ totalVueltas }}:</span>
+            <span class="pie-label">${{ granTotal.toFixed(2) }} ÷ {{ totalVueltas }} vueltas:</span>
             <strong class="pie-val text-blue">${{ cantidadPorVuelta.toFixed(2) }} por vuelta</strong>
           </div>
           <div class="pie-item">
@@ -275,9 +275,10 @@ function eliminarExtra(idx) {
 
 // ── Cálculos maestros ──────────────────────────────────────────────────────────
 
-// Total de bitácora = suma de total_generado de vueltas COMPLETADAS
+// Total de bitácora = suma de TOTAL NETO (ganancia real: generado − combustible − gastos)
+// NO se usa total_generado porque ese es el bruto antes de descontar combustible
 const totalBitacora = computed(() =>
-  registros.value.reduce((acc, r) => acc + (Number(r.total_generado) || 0), 0)
+  registros.value.reduce((acc, r) => acc + (Number(r.total_neto) || 0), 0)
 );
 
 // Total de extras válidos
@@ -401,10 +402,7 @@ function exportarPDF() {
   doc.setFontSize(9);
   doc.setTextColor(0, 0, 0);
   doc.text(`Vueltas totales: ${totalVueltas.value}`, 14, finalY);
-  doc.text(
-    `Bitácora $${granTotal.value.toFixed(2)} ÷ ${totalVueltas.value} = $${cantidadPorVuelta.value.toFixed(2)} por vuelta`,
-    14, finalY + 6
-  );
+  doc.text(`Total Neto $${granTotal.value.toFixed(2)} ÷ ${totalVueltas.value} vueltas = $${cantidadPorVuelta.value.toFixed(2)} por vuelta`, 14, finalY + 6);
   doc.text(`Cuota semanal aplicada: $${cuotaSemanal.value.toLocaleString('es-MX')} por unidad`, 14, finalY + 12);
 
   if (extras.value.some(ex => ex.monto > 0)) {
