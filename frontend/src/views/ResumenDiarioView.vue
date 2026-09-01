@@ -186,6 +186,7 @@
           <table class="table table-sheet">
             <thead>
               <tr>
+                <th style="width:30px;"></th>
                 <th style="width:30px;">#</th>
                 <th>UNIDAD / CONDUCTOR</th>
                 <th class="text-right">BIT. 1</th>
@@ -200,7 +201,14 @@
             </thead>
             <tbody>
               <tr v-for="(r, idx) in (grupo?.registros || [])" :key="r?.id || Math.random()"
-                  :class="r?.estado === 'pendiente' ? 'fila-pendiente' : ''">
+                  :class="[r?.estado === 'pendiente' ? 'fila-pendiente' : '', dragOverId === r?.id ? 'drag-over' : '']"
+                  :style="{ borderLeft: '4px solid ' + colorDeCapturista(r?.capturado_por_id) }"
+                  draggable="true"
+                  @dragstart="draggingId = r?.id"
+                  @dragover.prevent="dragOverId = r?.id"
+                  @drop="onDropRow(r, grupo)"
+                  @dragend="draggingId = null; dragOverId = null">
+                <td class="drag-handle">⠿</td>
                 <td class="row-num">{{ idx + 1 }}</td>
                 <td>
                   <strong>{{ r?.numero_unidad }} – {{ r?.nombre_conductor }}</strong>
@@ -221,7 +229,7 @@
                 </td>
                 <td v-if="auth.puedeEditar || auth.puedeEliminar">
                   <div class="action-cell">
-                    <button v-if="auth.puedeEditar" @click="abrirEdicion(r)" class="btn btn-sm btn-edit">✏️</button>
+                    <button v-if="auth.isAdmin || r?.capturado_por_id === auth.currentUser?.id" @click="abrirEdicion(r)" class="btn btn-sm btn-edit">✏️</button>
                     <button v-if="auth.puedeEliminar" @click="eliminar(r?.id)" class="btn btn-sm btn-delete">🗑️</button>
                   </div>
                 </td>
@@ -229,7 +237,7 @@
             </tbody>
             <tfoot>
               <tr class="subtotal-row">
-                <td colspan="2" class="subtotal-label">SUMA TOTAL DÍA</td>
+                <td colspan="3" class="subtotal-label">SUMA TOTAL DÍA</td>
                 <td class="text-right subtotal-val">${{ Number(grupo?.sumB1 || 0).toFixed(2) }}</td>
                 <td class="text-right subtotal-val">${{ Number(grupo?.sumB2 || 0).toFixed(2) }}</td>
                 <td class="text-right subtotal-val">${{ Number(grupo?.sumInter || 0).toFixed(2) }}</td>
@@ -242,6 +250,29 @@
               </tr>
             </tfoot>
           </table>
+        </div>
+      </div>
+
+      <div v-if="registros.length > 0" class="corte-caja-section">
+        <div class="corte-caja-title">
+          💵 Corte de Caja por Capturista
+        </div>
+        <div class="corte-list">
+          <div v-for="g in corteDeCaja.filter(x => auth.isAdmin || x.id === auth.currentUser?.id)" :key="g.id" class="corte-item">
+            <div>
+              <span class="corte-nombre">{{ g.nombre }}</span>
+              <span class="corte-badge" :style="{ background: g.color }">
+                {{ g.vueltas }} vuelta(s)
+              </span>
+            </div>
+            <div class="corte-montos">
+              <span>Gen: <strong>${{ g.generado.toFixed(2) }}</strong></span>
+              <span style="color:#d97706;">Comb: <strong>${{ g.combustible.toFixed(2) }}</strong></span>
+              <span :style="{ color: g.neto < 0 ? '#dc2626' : '#059669', fontWeight: '900' }">
+                Neto: <strong>${{ g.neto.toFixed(2) }}</strong>
+              </span>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -278,6 +309,9 @@ const pendientesArrastre = ref([]);
 const completandoArrastre = ref({});
 const editando  = ref(false);
 const formEdit  = ref({});
+
+const draggingId = ref(null);
+const dragOverId = ref(null);
 
 async function cargar() {
   try {
@@ -347,7 +381,66 @@ const gruposPorDia = computed(() => {
       mapa[r.fecha].sumNeto        += (Number(r.total_neto)              || 0);
     }
   });
-  return Object.values(mapa).sort((a, b) => (a.fecha || '').localeCompare(b.fecha || ''));
+  const res = Object.values(mapa).sort((a, b) => (a.fecha || '').localeCompare(b.fecha || ''));
+  res.forEach(g => {
+    g.registros.sort((a, b) => (a.orden || 0) - (b.orden || 0));
+  });
+  return res;
+});
+
+async function onDropRow(targetRow, grupo) {
+  if (!draggingId.value || draggingId.value === targetRow.id) return;
+  const sourceIndex = grupo.registros.findIndex(r => r.id === draggingId.value);
+  const targetIndex = grupo.registros.findIndex(r => r.id === targetRow.id);
+  if (sourceIndex === -1 || targetIndex === -1) return;
+  
+  const sourceRow = grupo.registros.splice(sourceIndex, 1)[0];
+  grupo.registros.splice(targetIndex, 0, sourceRow);
+  
+  const updates = grupo.registros.map((r, i) => ({
+    id: r.id,
+    orden: i * 1000
+  }));
+  
+  // update local orden
+  grupo.registros.forEach((r, i) => {
+    r.orden = i * 1000;
+  });
+  
+  try {
+    if (api.updateOrdenRegistros) {
+      await api.updateOrdenRegistros(updates);
+    }
+  } catch (e) {
+    console.error('Error actualizando orden:', e);
+  }
+}
+
+function colorDeCapturista(id) {
+  if (!id) return '#94a3b8';
+  const u = auth.users.find(u => u && u.id === id);
+  return u?.color || '#94a3b8';
+}
+
+const corteDeCaja = computed(() => {
+  const completados = registros.value.filter(r => r.estado === 'completado');
+  const mapa = {};
+  completados.forEach(r => {
+    const key = r.capturado_por_id || 'sin_asignar';
+    if (!mapa[key]) {
+      mapa[key] = {
+        id: key,
+        nombre: r.capturado_por_nombre || 'Sin asignar',
+        color: colorDeCapturista(key),
+        generado: 0, combustible: 0, neto: 0, vueltas: 0
+      };
+    }
+    mapa[key].generado    += Number(r.total_generado) || 0;
+    mapa[key].combustible += Number(r.combustible)    || 0;
+    mapa[key].neto        += Number(r.total_neto)     || 0;
+    mapa[key].vueltas++;
+  });
+  return Object.values(mapa);
 });
 
 const completados       = computed(() => registros.value.filter(r => r.estado === 'completado'));
@@ -396,6 +489,7 @@ import { onUnmounted } from 'vue';
 let liveInterval = null;
 
 onMounted(async () => {
+  if (auth.cargarUsuariosCloud) auth.cargarUsuariosCloud();
   await api.pullFullStoreFromCloud().catch(() => {});
   await cargar();
   liveInterval = setInterval(async () => {
@@ -576,6 +670,47 @@ onUnmounted(() => {
 .text-danger  { color:#dc2626; font-weight:800; }
 .text-success { color:#059669; font-weight:800; }
 .empty-state  { padding:2.5rem; color:#64748b; }
+
+.drag-handle { cursor: grab; color: #94a3b8; font-size: 1.2rem; text-align: center; }
+.drag-over { outline: 2px dashed #3b82f6; }
+
+.corte-caja-section {
+  margin-top: 1.5rem;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 12px;
+  overflow: hidden;
+}
+.corte-caja-title {
+  background: #1e293b;
+  color: #f1f5f9;
+  font-weight: 900;
+  padding: 0.75rem 1.25rem;
+  font-size: 0.9rem;
+}
+.corte-list {
+  background: #fff;
+}
+.corte-item {
+  padding: 0.85rem 1.25rem;
+  border-bottom: 1px solid #f1f5f9;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.corte-item:last-child {
+  border-bottom: none;
+}
+.corte-nombre { font-weight: 900; font-size: 0.9rem; margin-right: 0.5rem; }
+.corte-badge {
+  color: #fff;
+  padding: 0.15rem 0.6rem;
+  border-radius: 20px;
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+.corte-montos { display: flex; gap: 1.5rem; font-size: 0.82rem; }
 
 @media (max-width:1200px) { .rg-grid { grid-template-columns:repeat(3,1fr); } }
 @media (max-width:768px)  { .rg-grid { grid-template-columns:repeat(2,1fr); } .grid-2,.grid-3 { grid-template-columns:1fr; } }

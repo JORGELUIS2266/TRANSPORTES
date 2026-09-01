@@ -59,12 +59,14 @@
 
         <div v-if="extras.length > 0" class="extras-list">
           <div v-for="(ex, idx) in extras" :key="idx" class="extra-item">
+            <!-- Concepto del extra -->
             <input
               type="text"
               v-model="ex.concepto"
               class="form-input extra-input-concepto"
-              placeholder="Concepto (ej. Paquetería, Turismo...)"
+              placeholder="Concepto (ej. Paquetería, Turismo, Viaje especial...)"
             />
+            <!-- Monto del extra -->
             <div class="extra-input-monto-wrap">
               <span class="extra-prefix">$</span>
               <input
@@ -74,6 +76,28 @@
                 placeholder="0.00"
                 min="0"
                 step="0.01"
+              />
+            </div>
+            <!-- Unidad que hizo el extra -->
+            <div class="extra-unidad-wrap">
+              <label class="extra-mini-label">🚐 Unidad</label>
+              <select v-model="ex.numero_unidad" class="form-input extra-input-unidad">
+                <option value="">-- Ninguna --</option>
+                <option v-for="u in unidades" :key="u.id" :value="u.numero">
+                  {{ u.numero }} – {{ u.dueno?.nombre || 'Sin dueño' }}
+                </option>
+              </select>
+            </div>
+            <!-- Vueltas extras para esa unidad -->
+            <div class="extra-vueltas-wrap" v-if="ex.numero_unidad">
+              <label class="extra-mini-label">🔄 +Vueltas</label>
+              <input
+                type="number"
+                v-model.number="ex.vueltas_extra"
+                class="form-input extra-input-vueltas"
+                min="0"
+                max="10"
+                placeholder="0"
               />
             </div>
             <button @click="eliminarExtra(idx)" class="btn-remove-extra" title="Eliminar extra">✕</button>
@@ -267,7 +291,7 @@ async function cargar() {
 
 // ── Extras ─────────────────────────────────────────────────────────────────────
 function agregarExtra() {
-  extras.value.push({ concepto: '', monto: 0 });
+  extras.value.push({ concepto: '', monto: 0, numero_unidad: '', vueltas_extra: 0 });
 }
 function eliminarExtra(idx) {
   extras.value.splice(idx, 1);
@@ -289,8 +313,11 @@ const totalExtras = computed(() =>
 // Gran Total = Bitácora + Extras
 const granTotal = computed(() => totalBitacora.value + totalExtras.value);
 
-// Total de vueltas completadas de la semana
-const totalVueltas = computed(() => registros.value.length);
+// Total de vueltas completadas + vueltas extras de ingresos extras
+const totalVueltasExtras = computed(() =>
+  extras.value.reduce((acc, ex) => acc + (Number(ex.vueltas_extra) || 0), 0)
+);
+const totalVueltas = computed(() => registros.value.length + totalVueltasExtras.value);
 
 // Cantidad por vuelta con 2 decimales exactos
 const cantidadPorVuelta = computed(() => {
@@ -300,7 +327,7 @@ const cantidadPorVuelta = computed(() => {
 
 // ── Filas de liquidación por unidad ───────────────────────────────────────────
 const filasDeLiquidacion = computed(() => {
-  if (registros.value.length === 0) return [];
+  if (registros.value.length === 0 && extras.value.every(ex => !ex.numero_unidad)) return [];
 
   // Agrupar registros por número de unidad
   const mapa = {};
@@ -308,25 +335,34 @@ const filasDeLiquidacion = computed(() => {
     const num = (r.numero_unidad || '').trim();
     if (!num) return;
     if (!mapa[num]) {
-      // Buscar dueño en el catálogo de unidades
       const u = unidades.value.find(u => u && u.numero === num);
       const dueno = u?.dueno?.nombre || r.dueno_nombre || 'Sin dueño registrado';
-      mapa[num] = { numero: num, dueno, vueltas: 0 };
+      mapa[num] = { numero: num, dueno, vueltas: 0, vueltasExtra: 0 };
     }
     mapa[num].vueltas++;
   });
 
+  // Sumar vueltas extras de los ingresos extras a las unidades correspondientes
+  extras.value.forEach(ex => {
+    const num = (ex.numero_unidad || '').trim();
+    if (!num || !ex.vueltas_extra) return;
+    if (!mapa[num]) {
+      const u = unidades.value.find(u => u && u.numero === num);
+      const dueno = u?.dueno?.nombre || 'Sin dueño registrado';
+      mapa[num] = { numero: num, dueno, vueltas: 0, vueltasExtra: 0 };
+    }
+    mapa[num].vueltasExtra += Number(ex.vueltas_extra) || 0;
+  });
+
   // Calcular total y neto para cada unidad
   return Object.values(mapa)
-    .sort((a, b) => {
-      // Ordenar numéricamente por número de unidad
-      return parseInt(a.numero, 10) - parseInt(b.numero, 10);
-    })
+    .sort((a, b) => parseInt(a.numero, 10) - parseInt(b.numero, 10))
     .map(fila => {
-      // Total = Math.floor(vueltas × cantidadPorVuelta) — truncado, sin redondear
-      const total = Math.floor(fila.vueltas * cantidadPorVuelta.value);
+      const vueltasTotales = fila.vueltas + fila.vueltasExtra;
+      // Total = Math.floor(vueltas_totales × cantidadPorVuelta) — truncado, sin redondear
+      const total = Math.floor(vueltasTotales * cantidadPorVuelta.value);
       const neto  = total - cuotaSemanal.value;
-      return { ...fila, total, neto };
+      return { ...fila, vueltas: vueltasTotales, total, neto };
     });
 });
 
@@ -498,7 +534,14 @@ onMounted(() => {
 .extra-input-concepto { flex: 1; }
 .extra-input-monto-wrap { display: flex; align-items: center; gap: 0; }
 .extra-prefix     { background: #f1f5f9; border: 1px solid #cbd5e1; border-right: none; padding: 0.45rem 0.5rem; border-radius: 6px 0 0 6px; font-weight: 800; color: #334155; font-size: 0.88rem; }
-.extra-input-monto { width: 120px; border-radius: 0 6px 6px 0; text-align: right; font-weight: 800; }
+.extra-input-monto { width: 110px; border-radius: 0 6px 6px 0; text-align: right; font-weight: 800; }
+
+/* Unidad y vueltas extras */
+.extra-unidad-wrap,
+.extra-vueltas-wrap  { display: flex; flex-direction: column; gap: 0.1rem; }
+.extra-mini-label    { font-size: 0.7rem; font-weight: 800; color: #64748b; text-transform: uppercase; }
+.extra-input-unidad  { min-width: 140px; font-size: 0.8rem; padding: 0.3rem 0.5rem; }
+.extra-input-vueltas { width: 70px; text-align: center; font-weight: 900; font-size: 0.9rem; }
 .btn-remove-extra { background: #fee2e2; color: #dc2626; border: none; border-radius: 50%; width: 28px; height: 28px; cursor: pointer; font-size: 0.8rem; font-weight: 900; display: flex; align-items: center; justify-content: center; }
 
 .extras-empty { font-size: 0.82rem; color: #94a3b8; text-align: center; padding: 0.75rem; background: #f8fafc; border-radius: 6px; margin-bottom: 0.75rem; }

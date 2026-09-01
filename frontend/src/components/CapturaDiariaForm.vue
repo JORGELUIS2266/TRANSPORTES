@@ -561,11 +561,15 @@ async function guardarConEstado(estado) {
   try {
     await api.guardarRegistro({
       ...form.value,
-      vueltas_dadas:    1, // Bloqueado estrictamente a 1 vuelta
-      numero_unidad:    form.value.numero_unidad.trim(),
-      nombre_conductor: form.value.nombre_conductor.trim(),
-      dueno_nombre:     formDuenoNombre.value,
-      estado
+      vueltas_dadas:         1, // Bloqueado estrictamente a 1 vuelta
+      numero_unidad:         form.value.numero_unidad.trim(),
+      nombre_conductor:      form.value.nombre_conductor.trim(),
+      dueno_nombre:          formDuenoNombre.value,
+      estado,
+      // Taquillera que captura este registro
+      capturado_por_id:      auth.currentUser?.id     || '',
+      capturado_por_nombre:  auth.currentUser?.nombre || '',
+      orden:                 Date.now() // orden inicial = timestamp = se va al final
     });
 
     await cargar();

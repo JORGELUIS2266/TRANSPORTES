@@ -81,6 +81,25 @@
               </select>
             </div>
 
+            <!-- Color de taquillera (solo capturistas) -->
+            <div class="form-group" v-if="form.rol === 'capturista'">
+              <label class="form-label">🎨 Color de identificación (taquillera)
+                <small style="font-weight:400; color:#64748b;"> — Sus registros aparecerán en este color en el Resumen</small>
+              </label>
+              <div class="color-pick-row">
+                <input type="color" v-model="form.color" class="color-input" />
+                <span class="color-preview" :style="{ background: form.color }">
+                  {{ form.nombre || 'Taquillera' }}
+                </span>
+                <button type="button" class="btn-color-preset"
+                  v-for="c in coloresPreset" :key="c"
+                  :style="{ background: c, border: form.color === c ? '3px solid #0f172a' : '2px solid transparent' }"
+                  @click="form.color = c"
+                  :title="c"
+                ></button>
+              </div>
+            </div>
+
             <!-- Alertas -->
             <div v-if="msgExito" class="alert-success">✅ {{ msgExito }}</div>
             <div v-if="msgError" class="alert-error">❌ {{ msgError }}</div>
@@ -202,8 +221,22 @@ const form = ref({
   username:        '',
   password:        '',
   passwordActual:  '',
-  rol:             'capturista'
+  rol:             'capturista',
+  color:           '#1e40af'
 });
+
+const coloresPreset = [
+  '#1e40af', // azul
+  '#15803d', // verde
+  '#b91c1c', // rojo
+  '#7e22ce', // morado
+  '#c2410c', // naranja
+  '#0e7490', // cian
+  '#a16207', // dorado
+  '#be185d', // rosa
+  '#374151', // gris oscuro
+  '#0f172a', // negro
+];
 
 function getRolLabel(rol) {
   if (rol === 'admin') return 'Administrador';
@@ -232,16 +265,16 @@ function editarUsuario(u) {
     username:       u.username,
     password:       '',
     passwordActual: u.password_raw || '',
-    rol:            u.rol
+    rol:            u.rol,
+    color:          u.color || '#1e40af'
   };
-  // Scroll al formulario
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
 function cancelarEdicion() {
   modoEdicion.value = false;
   mostrarPass.value = false;
-  form.value = { id: '', nombre: '', username: '', password: '', passwordActual: '', rol: 'capturista' };
+  form.value = { id: '', nombre: '', username: '', password: '', passwordActual: '', rol: 'capturista', color: '#1e40af' };
   msgExito.value = '';
   msgError.value = '';
 }
@@ -258,26 +291,26 @@ async function guardarUsuario() {
 
   try {
     if (modoEdicion.value) {
-      // ── ACTUALIZAR usuario existente
       await auth.actualizarUsuario({
         id:       form.value.id,
         nombre:   form.value.nombre.trim(),
         rol:      form.value.rol,
-        password: form.value.password.trim() || null
+        password: form.value.password.trim() || null,
+        color:    form.value.color || '#1e40af'
       });
       msgExito.value = `Usuario "@${form.value.username}" actualizado correctamente.`;
       modoEdicion.value = false;
-      form.value = { id: '', nombre: '', username: '', password: '', passwordActual: '', rol: 'capturista' };
+      form.value = { id: '', nombre: '', username: '', password: '', passwordActual: '', rol: 'capturista', color: '#1e40af' };
     } else {
-      // ── CREAR nuevo usuario
       await auth.agregarUsuario({
         nombre:   form.value.nombre.trim(),
         username: form.value.username.trim(),
         password: form.value.password.trim(),
-        rol:      form.value.rol
+        rol:      form.value.rol,
+        color:    form.value.color || '#1e40af'
       });
       msgExito.value = `Usuario "@${form.value.username}" creado. Ya puede iniciar sesión.`;
-      form.value = { id: '', nombre: '', username: '', password: '', passwordActual: '', rol: 'capturista' };
+      form.value = { id: '', nombre: '', username: '', password: '', passwordActual: '', rol: 'capturista', color: '#1e40af' };
     }
     setTimeout(() => { msgExito.value = ''; }, 4000);
   } catch (e) {
@@ -298,6 +331,42 @@ async function eliminar(id, username) {
 </script>
 
 <style scoped>
+/* ── Color Picker ──────────────────────────────────────── */
+.color-pick-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  margin-top: 0.35rem;
+}
+.color-input {
+  width: 44px;
+  height: 38px;
+  border: 2px solid #e2e8f0;
+  border-radius: 8px;
+  cursor: pointer;
+  padding: 2px;
+  background: none;
+}
+.color-preview {
+  padding: 0.3rem 0.85rem;
+  border-radius: 20px;
+  color: #ffffff;
+  font-weight: 800;
+  font-size: 0.78rem;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.4);
+  white-space: nowrap;
+}
+.btn-color-preset {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  cursor: pointer;
+  transition: transform 0.1s;
+}
+.btn-color-preset:hover { transform: scale(1.2); }
+
+
 .modal-overlay {
   position: fixed;
   top: 0; left: 0; right: 0; bottom: 0;

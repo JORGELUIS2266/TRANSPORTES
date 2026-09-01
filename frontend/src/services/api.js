@@ -193,7 +193,8 @@ export const api = {
       .from('registros')
       .select('*')
       .eq('semana_id', semanaId)
-      .order('fecha', { ascending: true })
+      .order('orden',      { ascending: true })
+      .order('fecha',      { ascending: true })
       .order('created_at', { ascending: true });
     if (error) { console.warn('[api] getRegistrosDeSemana error:', error.message); return []; }
     return data || [];
@@ -239,7 +240,10 @@ export const api = {
       concepto_gastos:         registro.concepto_gastos || '',
       total_neto:              totalNeto,
       estado:                  registro.estado || 'completado',
-      arrastre:                registro.arrastre || false
+      arrastre:                registro.arrastre || false,
+      orden:                   registro.orden ?? Date.now(),
+      capturado_por_id:        registro.capturado_por_id    || '',
+      capturado_por_nombre:    registro.capturado_por_nombre || ''
     };
 
     const { data, error } = await supabase.from('registros').upsert([rec]).select();
@@ -273,6 +277,24 @@ export const api = {
       `Unidad ${r?.numero_unidad || 'S/N'} (${r?.nombre_conductor || ''}) del ${r?.fecha || ''} · Monto: $${r?.total_neto || 0}`,
       'eliminacion', '🗑️'
     );
+    return true;
+  },
+
+  // Actualizar solo el orden de un lote de registros (drag & drop)
+  async updateOrdenRegistros(updates) {
+    // updates = [ { id, orden }, { id, orden }, ... ]
+    await Promise.all(
+      updates.map(u =>
+        supabase.from('registros').update({ orden: u.orden }).eq('id', u.id)
+      )
+    );
+    return true;
+  },
+
+  // Actualizar el color de un usuario (solo admin)
+  async actualizarColorUsuario(userId, color) {
+    const { error } = await supabase.from('usuarios').update({ color }).eq('id', userId);
+    if (error) throw new Error('Error actualizando color: ' + error.message);
     return true;
   },
 

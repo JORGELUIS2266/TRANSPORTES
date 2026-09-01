@@ -106,7 +106,8 @@ export const useAuthStore = defineStore('auth', () => {
       username: dbUser.username,
       nombre:   dbUser.nombre,
       rol:      dbUser.rol,
-      icono:    dbUser.icono || '👤'
+      icono:    dbUser.icono || '👤',
+      color:    dbUser.color || '#1e293b'
     };
     sessionStorage.setItem(SESSION_STORAGE_KEY, encryptPayload(currentUser.value));
     api.registrarActividad(
@@ -150,7 +151,8 @@ export const useAuthStore = defineStore('auth', () => {
       password_raw:  pass,
       nombre:       (nuevoUsuario.nombre || uname).trim(),
       rol:          nuevoUsuario.rol || 'capturista',
-      icono
+      icono,
+      color:        nuevoUsuario.color || '#1e293b'
     };
 
     const { data, error } = await supabase.from('usuarios').insert([rec]).select();
@@ -192,7 +194,8 @@ export const useAuthStore = defineStore('auth', () => {
     const updates = {
       nombre: datos.nombre,
       rol:    datos.rol,
-      icono:  datos.rol === 'admin' ? '👑' : datos.rol === 'capturista' ? '✍️' : '👁️'
+      icono:  datos.rol === 'admin' ? '👑' : datos.rol === 'capturista' ? '✍️' : '👁️',
+      color:  datos.color || '#1e293b'
     };
 
     // Solo actualizar contraseña si se proporcionó una nueva
