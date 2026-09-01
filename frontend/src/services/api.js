@@ -189,13 +189,28 @@ export const api = {
   // ── Registros de Vueltas Diarias ───────────────────────────────────────────
   async getRegistrosDeSemana(semanaId) {
     if (!semanaId) return [];
-    const { data, error } = await supabase
+
+    // Intentar ordenar por 'orden' (campo nuevo). Si la columna aún no existe
+    // en la BD (migración pendiente), hacer fallback a fecha + created_at
+    let { data, error } = await supabase
       .from('registros')
       .select('*')
       .eq('semana_id', semanaId)
       .order('orden',      { ascending: true })
       .order('fecha',      { ascending: true })
       .order('created_at', { ascending: true });
+
+    if (error) {
+      // Posiblemente la columna 'orden' no existe aún → fallback sin ella
+      console.warn('[api] Fallback sin orden:', error.message);
+      ({ data, error } = await supabase
+        .from('registros')
+        .select('*')
+        .eq('semana_id', semanaId)
+        .order('fecha',      { ascending: true })
+        .order('created_at', { ascending: true }));
+    }
+
     if (error) { console.warn('[api] getRegistrosDeSemana error:', error.message); return []; }
     return data || [];
   },
