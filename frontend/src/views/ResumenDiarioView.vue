@@ -1,49 +1,101 @@
 <template>
   <div class="resumen-container">
 
-    <!-- Modal de Edición -->
+    <!-- Modal de Edición con permisos por campo -->
     <div v-if="editando" class="modal-overlay" @click.self="cancelarEdicion">
       <div class="modal-box">
         <div class="modal-header">
-          <h3>✏️ Editar Registro</h3>
+          <div>
+            <h3>✏️ Editar Registro</h3>
+            <small v-if="modoEdicion === 'solo_b'" style="color:#0891b2;">
+              🔒 Solo puedes editar los campos que tú registraste (Bit. 2, Intermedios, Combustible)
+            </small>
+            <small v-else-if="modoEdicion === 'solo_a'" style="color:#d97706;">
+              🔒 Solo puedes editar los campos que tú registraste (Bitácora 1)
+            </small>
+          </div>
           <button @click="cancelarEdicion" class="modal-close">✕</button>
         </div>
         <div class="modal-body">
+          <!-- Unidad y conductor solo admin/owner -->
           <div class="grid-2">
             <div class="form-group">
               <label class="form-label">Unidad</label>
-              <input type="text" v-model="formEdit.numero_unidad" class="form-input" />
+              <input type="text" v-model="formEdit.numero_unidad" class="form-input"
+                :class="{ 'input-locked': modoEdicion !== 'admin' && modoEdicion !== 'solo_a' }"
+                :readonly="modoEdicion !== 'admin' && modoEdicion !== 'solo_a'" />
             </div>
             <div class="form-group">
               <label class="form-label">Conductor</label>
-              <input type="text" v-model="formEdit.nombre_conductor" class="form-input" />
+              <input type="text" v-model="formEdit.nombre_conductor" class="form-input"
+                :class="{ 'input-locked': modoEdicion !== 'admin' && modoEdicion !== 'solo_a' }"
+                :readonly="modoEdicion !== 'admin' && modoEdicion !== 'solo_a'" />
             </div>
           </div>
           <div class="grid-3">
-            <div class="form-group">
-              <label class="form-label">Bitácora 1 ($)</label>
-              <input type="number" v-model.number="formEdit.bitacora_tlaxiaco_putla" class="form-input" min="0" step="10" />
+            <!-- BIT 1: solo A o admin puede editar -->
+            <div class="form-group" :style="{ borderLeft: '3px solid ' + colorDeCapturista(formEdit.capturado_por_id), paddingLeft: '0.5rem' }">
+              <label class="form-label">
+                Bitácora 1 ($)
+                <span class="field-owner-badge" :style="{ background: colorDeCapturista(formEdit.capturado_por_id) }">
+                  {{ formEdit.capturado_por_nombre || 'A' }}
+                </span>
+              </label>
+              <input type="number" v-model.number="formEdit.bitacora_tlaxiaco_putla" class="form-input"
+                :class="{ 'input-locked': modoEdicion === 'solo_b' }"
+                :readonly="modoEdicion === 'solo_b'"
+                min="0" step="10" />
             </div>
-            <div class="form-group">
-              <label class="form-label">Bitácora 2 ($)</label>
-              <input type="number" v-model.number="formEdit.bitacora_putla_tlaxiaco" class="form-input" min="0" step="10" />
+            <!-- BIT 2: solo B o admin puede editar -->
+            <div class="form-group" :style="{ borderLeft: '3px solid ' + colorDeCapturista(formEdit.completado_por_id || formEdit.capturado_por_id), paddingLeft: '0.5rem' }">
+              <label class="form-label">
+                Bitácora 2 ($)
+                <span v-if="formEdit.completado_por_id" class="field-owner-badge" :style="{ background: colorDeCapturista(formEdit.completado_por_id) }">
+                  {{ formEdit.completado_por_nombre || 'B' }}
+                </span>
+              </label>
+              <input type="number" v-model.number="formEdit.bitacora_putla_tlaxiaco" class="form-input"
+                :class="{ 'input-locked': modoEdicion === 'solo_a' }"
+                :readonly="modoEdicion === 'solo_a'"
+                min="0" step="10" />
             </div>
-            <div class="form-group">
-              <label class="form-label">Intermedio ($)</label>
-              <input type="number" v-model.number="formEdit.intermedios" class="form-input" min="0" step="10" />
+            <!-- INTER: solo B o admin puede editar -->
+            <div class="form-group" :style="{ borderLeft: '3px solid ' + colorDeCapturista(formEdit.completado_por_id || formEdit.capturado_por_id), paddingLeft: '0.5rem' }">
+              <label class="form-label">
+                Intermedios ($)
+                <span v-if="formEdit.completado_por_id" class="field-owner-badge" :style="{ background: colorDeCapturista(formEdit.completado_por_id) }">
+                  {{ formEdit.completado_por_nombre || 'B' }}
+                </span>
+              </label>
+              <input type="number" v-model.number="formEdit.intermedios" class="form-input"
+                :class="{ 'input-locked': modoEdicion === 'solo_a' }"
+                :readonly="modoEdicion === 'solo_a'"
+                min="0" step="10" />
             </div>
           </div>
           <div class="grid-2">
-            <div class="form-group">
-              <label class="form-label">Combustible ($)</label>
-              <input type="number" v-model.number="formEdit.combustible" class="form-input" min="0" step="50" />
+            <!-- COMBUSTIBLE: solo B o admin puede editar -->
+            <div class="form-group" :style="{ borderLeft: '3px solid ' + colorDeCapturista(formEdit.completado_por_id || formEdit.capturado_por_id), paddingLeft: '0.5rem' }">
+              <label class="form-label">
+                Combustible ($)
+                <span v-if="formEdit.completado_por_id" class="field-owner-badge" :style="{ background: colorDeCapturista(formEdit.completado_por_id) }">
+                  {{ formEdit.completado_por_nombre || 'B' }}
+                </span>
+              </label>
+              <input type="number" v-model.number="formEdit.combustible" class="form-input"
+                :class="{ 'input-locked': modoEdicion === 'solo_a' }"
+                :readonly="modoEdicion === 'solo_a'"
+                min="0" step="50" />
             </div>
             <div class="form-group">
               <label class="form-label">Imprevistos ($)</label>
-              <input type="number" v-model.number="formEdit.gastos_imprevistos" class="form-input" min="0" step="10" />
+              <input type="number" v-model.number="formEdit.gastos_imprevistos" class="form-input"
+                :class="{ 'input-locked': modoEdicion === 'solo_a' }"
+                :readonly="modoEdicion === 'solo_a'"
+                min="0" step="10" />
             </div>
           </div>
-          <div class="form-group">
+          <div class="form-group" v-if="modoEdicion !== 'solo_b'">
             <label class="form-label">Estado</label>
             <select v-model="formEdit.estado" class="form-input">
               <option value="completado">✅ Completado</option>
@@ -224,9 +276,18 @@
                   <strong>{{ r?.numero_unidad }} – {{ r?.nombre_conductor }}</strong>
                   <span v-if="r?.arrastre" class="chip-orange-sm">ARRASTRE</span>
                 </td>
-                <td class="text-right">${{ Number(r?.bitacora_tlaxiaco_putla || 0).toFixed(2) }}</td>
-                <td class="text-right">${{ Number(r?.bitacora_putla_tlaxiaco || 0).toFixed(2) }}</td>
-                <td class="text-right">${{ Number(r?.intermedios || 0).toFixed(2) }}</td>
+                <!-- BIT 1: tint color de A -->
+                <td class="text-right" :style="{ background: colorTint(r?.capturado_por_id) }">
+                  ${{ Number(r?.bitacora_tlaxiaco_putla || 0).toFixed(2) }}
+                </td>
+                <!-- BIT 2: tint color de B si hubo completador, si no de A -->
+                <td class="text-right" :style="{ background: colorTint(r?.completado_por_id || r?.capturado_por_id) }">
+                  ${{ Number(r?.bitacora_putla_tlaxiaco || 0).toFixed(2) }}
+                </td>
+                <!-- INTER: tint color de B -->
+                <td class="text-right" :style="{ background: colorTint(r?.completado_por_id || r?.capturado_por_id) }">
+                  ${{ Number(r?.intermedios || 0).toFixed(2) }}
+                </td>
                 <td class="text-right text-bold">${{ Number(r?.total_generado || 0).toFixed(2) }}</td>
                 <td class="text-right" style="color:#d97706;">${{ Number(r?.combustible || 0).toFixed(2) }}</td>
                 <td class="text-right" :class="Number(r?.total_neto || 0) < 0 ? 'cell-negative' : 'cell-positive'">
@@ -237,16 +298,27 @@
                     {{ r?.estado === 'pendiente' ? '⏳ PENDIENTE' : '✅ LISTO' }}
                   </span>
                 </td>
-                <td v-if="auth.puedeEditar || auth.puedeEliminar">
+                <td v-if="auth.puedeEditar || auth.puedeEliminar || auth.puedeCapturar">
                   <div class="action-cell">
-                    <button v-if="auth.isAdmin || r?.capturado_por_id === auth.currentUser?.id" @click="abrirEdicion(r)" class="btn btn-sm btn-edit">✏️</button>
+                    <!-- Edit: A ve su boton, B ve el suyo, admin ve todos -->
+                    <button
+                      v-if="auth.isAdmin || r?.capturado_por_id === auth.currentUser?.id || r?.completado_por_id === auth.currentUser?.id"
+                      @click="abrirEdicion(r)"
+                      class="btn btn-sm btn-edit"
+                    >✏️</button>
+                    <!-- Completar: solo para PENDIENTE de otra taquillera -->
                     <button
                       v-if="r?.estado === 'pendiente' && r?.capturado_por_id !== auth.currentUser?.id && auth.puedeCapturar"
                       @click="completandoVuelta = r"
                       class="btn btn-sm btn-completar"
                       title="Completar esta vuelta"
                     >🔓</button>
-                    <button v-if="auth.isAdmin || r?.capturado_por_id === auth.currentUser?.id" @click="eliminar(r?.id)" class="btn btn-sm btn-delete">🗑️</button>
+                    <!-- Eliminar: solo el que capturó o admin -->
+                    <button
+                      v-if="auth.isAdmin || r?.capturado_por_id === auth.currentUser?.id"
+                      @click="eliminar(r?.id)"
+                      class="btn btn-sm btn-delete"
+                    >🗑️</button>
                   </div>
                 </td>
               </tr>
@@ -468,6 +540,35 @@ function colorDeCapturista(id) {
   const u = auth.users.find(u => u && u.id === id);
   return u?.color || '#94a3b8';
 }
+
+// Tint suave del color del capturista para el fondo de celdas
+function colorTint(id) {
+  if (!id) return 'transparent';
+  const hex = colorDeCapturista(id).replace('#', '');
+  if (hex.length !== 6) return 'transparent';
+  const r = parseInt(hex.slice(0, 2), 16);
+  const g = parseInt(hex.slice(2, 4), 16);
+  const b = parseInt(hex.slice(4, 6), 16);
+  return `rgba(${r},${g},${b},0.10)`;
+}
+
+// Determina qué campos puede editar el usuario actual:
+// 'admin'  → todos
+// 'solo_a' → solo Bit.1 (es el capturador original en una vuelta compartida)
+// 'solo_b' → solo Bit.2/Inter/Comb (es quien completó la vuelta)
+// 'full'   → hizo todo solo, edita todo
+const modoEdicion = computed(() => {
+  if (auth.isAdmin) return 'admin';
+  const reg = formEdit.value;
+  if (!reg || !reg.id) return 'admin';
+  const uid = auth.currentUser?.id;
+  const esOwner     = reg.capturado_por_id    === uid;
+  const esCompletor = reg.completado_por_id   === uid;
+  const hayCompletor = !!reg.completado_por_id;
+  if (esOwner && hayCompletor)    return 'solo_a'; // A edita solo Bit1
+  if (esCompletor && !esOwner)    return 'solo_b'; // B edita Bit2/Inter/Comb
+  return 'full'; // una sola taquillera hizo todo
+});
 
 function corteDeDiaParaCapturista(grupoRegistros, capturistaId) {
   // Returns { generado, combustible, neto, vueltas } for one capturista on one day
@@ -777,7 +878,28 @@ onUnmounted(() => {
 .btn-edit:hover  { background:#dbeafe; }
 .btn-delete { background:#fef2f2; color:#dc2626; border:1px solid #fca5a5; }
 .btn-delete:hover{ background:#fee2e2; }
+/* Campos bloqueados en el modal de edición */
+.input-locked {
+  background: #f1f5f9 !important;
+  color: #94a3b8 !important;
+  cursor: not-allowed !important;
+  border-color: #e2e8f0 !important;
+}
+/* Badge pequeño que indica quién llenó el campo */
+.field-owner-badge {
+  display: inline-block;
+  color: #fff;
+  padding: 0.05rem 0.45rem;
+  border-radius: 20px;
+  font-size: 0.65rem;
+  font-weight: 900;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.3);
+  margin-left: 0.3rem;
+  vertical-align: middle;
+}
+
 .btn-completar {
+
   background: #f0fdf4;
   color: #15803d;
   border: 1.5px solid #86efac;
