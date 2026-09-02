@@ -64,6 +64,16 @@
       </div>
     </div>
 
+    <!-- Modal Completar Vuelta Ajena -->
+    <CompletarVueltaModal
+      v-if="completandoVuelta"
+      :registro="completandoVuelta"
+      :colorA="colorDeCapturista(completandoVuelta?.capturado_por_id)"
+      :colorB="colorDeCapturista(auth.currentUser?.id)"
+      @cerrar="completandoVuelta = null"
+      @guardado="completandoVuelta = null; cargar()"
+    />
+
     <!-- ══════════════════════════════════════
          BANNER OFICIAL Y SELECTOR DE SEMANA
     ══════════════════════════════════════ -->
@@ -230,7 +240,13 @@
                 <td v-if="auth.puedeEditar || auth.puedeEliminar">
                   <div class="action-cell">
                     <button v-if="auth.isAdmin || r?.capturado_por_id === auth.currentUser?.id" @click="abrirEdicion(r)" class="btn btn-sm btn-edit">✏️</button>
-                    <button v-if="auth.puedeEliminar" @click="eliminar(r?.id)" class="btn btn-sm btn-delete">🗑️</button>
+                    <button
+                      v-if="r?.estado === 'pendiente' && r?.capturado_por_id !== auth.currentUser?.id && auth.puedeCapturar"
+                      @click="completandoVuelta = r"
+                      class="btn btn-sm btn-completar"
+                      title="Completar esta vuelta"
+                    >🔓</button>
+                    <button v-if="auth.isAdmin || r?.capturado_por_id === auth.currentUser?.id" @click="eliminar(r?.id)" class="btn btn-sm btn-delete">🗑️</button>
                   </div>
                 </td>
               </tr>
@@ -251,11 +267,39 @@
             </tfoot>
           </table>
         </div>
+
+        <!-- Corte de Caja del DÍA por capturista -->
+        <div class="corte-dia-section" v-if="capturistasEnSemana.filter(c => auth.isAdmin || c.id === auth.currentUser?.id).length > 0">
+          <div class="corte-dia-header">🧾 Corte del día</div>
+          <div class="corte-dia-list">
+            <template v-for="cap in capturistasEnSemana" :key="cap.id">
+              <div
+                v-if="auth.isAdmin || cap.id === auth.currentUser?.id"
+                class="corte-dia-item"
+                :style="{ borderLeft: '4px solid ' + colorDeCapturista(cap.id) }"
+              >
+                <div class="corte-dia-nombre">
+                  <span :style="{ color: colorDeCapturista(cap.id), fontWeight: '900' }">{{ cap.nombre }}</span>
+                </div>
+                <template v-if="corteDeDiaParaCapturista(grupo.registros, cap.id).vueltas > 0">
+                  <div class="corte-dia-montos">
+                    <span>Gen: <strong>${{ corteDeDiaParaCapturista(grupo.registros, cap.id).generado.toFixed(2) }}</strong></span>
+                    <span style="color:#d97706;">Comb: <strong>${{ corteDeDiaParaCapturista(grupo.registros, cap.id).combustible.toFixed(2) }}</strong></span>
+                    <span :style="{ color: corteDeDiaParaCapturista(grupo.registros, cap.id).neto < 0 ? '#dc2626' : '#059669', fontWeight: '900' }">
+                      Neto: <strong>${{ corteDeDiaParaCapturista(grupo.registros, cap.id).neto.toFixed(2) }}</strong>
+                    </span>
+                  </div>
+                </template>
+                <span v-else class="corte-dia-vacio">Sin vueltas completadas este día</span>
+              </div>
+            </template>
+          </div>
+        </div>
       </div>
 
       <div v-if="registros.length > 0" class="corte-caja-section">
         <div class="corte-caja-title">
-          💵 Corte de Caja por Capturista
+          📊 Corte de Caja Semanal por Capturista
         </div>
         <div class="corte-list">
           <div v-for="g in corteDeCaja.filter(x => auth.isAdmin || x.id === auth.currentUser?.id)" :key="g.id" class="corte-item">
@@ -285,7 +329,8 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue';
+import CompletarVueltaModal from '../components/CompletarVueltaModal.vue';
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
 import { api } from '../services/api';
 import { useAuthStore } from '../stores/auth';
 import { exportarPDF }   from '../utils/pdfExport';
@@ -309,6 +354,8 @@ const pendientesArrastre = ref([]);
 const completandoArrastre = ref({});
 const editando  = ref(false);
 const formEdit  = ref({});
+
+const completandoVuelta = ref(null); // registro being completed
 
 const draggingId = ref(null);
 const dragOverId = ref(null);
@@ -422,26 +469,110 @@ function colorDeCapturista(id) {
   return u?.color || '#94a3b8';
 }
 
-const corteDeCaja = computed(() => {
-  const completados = registros.value.filter(r => r.estado === 'completado');
-  const mapa = {};
-  completados.forEach(r => {
-    const key = r.capturado_por_id || 'sin_asignar';
-    if (!mapa[key]) {
-      mapa[key] = {
-        id: key,
-        nombre: r.capturado_por_nombre || 'Sin asignar',
-        color: colorDeCapturista(key),
-        generado: 0, combustible: 0, neto: 0, vueltas: 0
-      };
+function corteDeDiaParaCapturista(grupoRegistros, capturistaId) {
+  // Returns { generado, combustible, neto, vueltas } for one capturista on one day
+  let generado = 0, combustible = 0, neto = 0, vueltas = 0;
+  (grupoRegistros || []).filter(r => r.estado === 'completado').forEach(r => {
+    const esOwner    = r.capturado_por_id    === capturistaId;
+    const esCompletor = r.completado_por_id  === capturistaId;
+    if (esOwner && !r.completado_por_id) {
+      // A did everything
+      generado    += Number(r.total_generado) || 0;
+      combustible += Number(r.combustible)    || 0;
+      neto        += Number(r.total_neto)     || 0;
+      vueltas++;
+    } else if (esOwner && r.completado_por_id) {
+      // A captured, B completed — A only gets Bit1
+      const bit1 = Number(r.bitacora_tlaxiaco_putla) || 0;
+      generado += bit1;
+      neto     += bit1;
+      vueltas++;
+    } else if (esCompletor) {
+      // B completed A's trip — B gets Bit2+Inter-Combustible
+      const bit2  = Number(r.bitacora_putla_tlaxiaco) || 0;
+      const inter = Number(r.intermedios)             || 0;
+      const comb  = Number(r.combustible)             || 0;
+      const imprev = Number(r.gastos_imprevistos)     || 0;
+      generado    += bit2 + inter;
+      combustible += comb;
+      neto        += bit2 + inter - comb - imprev;
+      vueltas++;
     }
-    mapa[key].generado    += Number(r.total_generado) || 0;
-    mapa[key].combustible += Number(r.combustible)    || 0;
-    mapa[key].neto        += Number(r.total_neto)     || 0;
-    mapa[key].vueltas++;
   });
+  return { generado, combustible, neto, vueltas };
+}
+
+const capturistasEnSemana = computed(() => {
+  const ids = new Set();
+  const lista = [];
+  (registros.value || []).forEach(r => {
+    if (r.capturado_por_id && !ids.has(r.capturado_por_id)) {
+      ids.add(r.capturado_por_id);
+      lista.push({ id: r.capturado_por_id, nombre: r.capturado_por_nombre || 'Sin nombre' });
+    }
+    if (r.completado_por_id && !ids.has(r.completado_por_id)) {
+      ids.add(r.completado_por_id);
+      lista.push({ id: r.completado_por_id, nombre: r.completado_por_nombre || 'Sin nombre' });
+    }
+  });
+  return lista;
+});
+
+const corteDeCaja = computed(() => {
+  const mapa = {};
+  
+  (registros.value || []).filter(r => r.estado === 'completado').forEach(r => {
+    const ensureEntry = (id, nombre) => {
+      if (!mapa[id]) {
+        mapa[id] = {
+          id, nombre: nombre || 'Sin nombre',
+          color: colorDeCapturista(id),
+          generado: 0, combustible: 0, neto: 0, vueltas: 0
+        };
+      }
+    };
+
+    const ownerId    = r.capturado_por_id   || 'sin_asignar';
+    const completorId = r.completado_por_id || '';
+    const ownerNombre    = r.capturado_por_nombre    || 'Sin asignar';
+    const completorNombre = r.completado_por_nombre  || '';
+
+    if (!completorId) {
+      // Only one taquillera did everything
+      ensureEntry(ownerId, ownerNombre);
+      mapa[ownerId].generado    += Number(r.total_generado) || 0;
+      mapa[ownerId].combustible += Number(r.combustible)    || 0;
+      mapa[ownerId].neto        += Number(r.total_neto)     || 0;
+      mapa[ownerId].vueltas++;
+    } else {
+      // Two taquilleras shared this trip — split accounts
+      ensureEntry(ownerId,     ownerNombre);
+      ensureEntry(completorId, completorNombre);
+
+      const bit1  = Number(r.bitacora_tlaxiaco_putla)  || 0;
+      const bit2  = Number(r.bitacora_putla_tlaxiaco)  || 0;
+      const inter = Number(r.intermedios)              || 0;
+      const comb  = Number(r.combustible)              || 0;
+      const imprev = Number(r.gastos_imprevistos)      || 0;
+
+      // A (original capturista) gets only Bit1 — no combustible responsibility
+      mapa[ownerId].generado += bit1;
+      mapa[ownerId].neto     += bit1;
+      mapa[ownerId].vueltas++;
+
+      // B (completor) gets Bit2+Inter, pays combustible
+      mapa[completorId].generado    += bit2 + inter;
+      mapa[completorId].combustible += comb;
+      mapa[completorId].neto        += bit2 + inter - comb - imprev;
+      mapa[completorId].vueltas++;
+    }
+  });
+
   return Object.values(mapa);
 });
+
+// Force re-fetch users when component mounts to ensure colors are loaded
+watch(() => auth.users, () => {}, { deep: true });
 
 const completados       = computed(() => registros.value.filter(r => r.estado === 'completado'));
 const granTotalGenerado    = computed(() => completados.value.reduce((s, r) => s + (Number(r.total_generado) || 0), 0));
@@ -483,8 +614,6 @@ async function eliminar(id) {
 
 function exportarPDFClick()   { exportarPDF(registros.value,   semanaObj.value); }
 function exportarExcelClick() { exportarExcel(registros.value, semanaObj.value); }
-
-import { onUnmounted } from 'vue';
 
 let liveInterval = null;
 
@@ -648,6 +777,18 @@ onUnmounted(() => {
 .btn-edit:hover  { background:#dbeafe; }
 .btn-delete { background:#fef2f2; color:#dc2626; border:1px solid #fca5a5; }
 .btn-delete:hover{ background:#fee2e2; }
+.btn-completar {
+  background: #f0fdf4;
+  color: #15803d;
+  border: 1.5px solid #86efac;
+  border-radius: 6px;
+  font-size: 0.82rem;
+  padding: 0.25rem 0.5rem;
+  cursor: pointer;
+  font-weight: 900;
+  transition: all 0.15s;
+}
+.btn-completar:hover { background: #dcfce7; }
 
 .modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:999; display:flex; align-items:center; justify-content:center; padding:1rem; }
 .modal-box { background:white; border-radius:12px; width:100%; max-width:640px; box-shadow:0 20px 60px rgba(0,0,0,0.28); animation:mIn 0.18s ease; }
@@ -711,6 +852,36 @@ onUnmounted(() => {
   font-weight: 800;
 }
 .corte-montos { display: flex; gap: 1.5rem; font-size: 0.82rem; }
+
+.corte-dia-section {
+  margin: 0.5rem 0 1.5rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #f8fafc;
+}
+.corte-dia-header {
+  background: #334155;
+  color: #f1f5f9;
+  font-weight: 900;
+  font-size: 0.78rem;
+  padding: 0.4rem 1rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.corte-dia-list { display: flex; flex-direction: column; }
+.corte-dia-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.5rem 1rem;
+  border-bottom: 1px solid #f1f5f9;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+.corte-dia-nombre { font-size: 0.85rem; min-width: 120px; }
+.corte-dia-montos { display: flex; gap: 1.5rem; font-size: 0.82rem; flex-wrap: wrap; }
+.corte-dia-vacio  { font-size: 0.78rem; color: #94a3b8; font-style: italic; }
 
 @media (max-width:1200px) { .rg-grid { grid-template-columns:repeat(3,1fr); } }
 @media (max-width:768px)  { .rg-grid { grid-template-columns:repeat(2,1fr); } .grid-2,.grid-3 { grid-template-columns:1fr; } }

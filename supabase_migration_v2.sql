@@ -13,11 +13,15 @@ SET orden = EXTRACT(EPOCH FROM COALESCE(created_at, NOW())) * 1000
 WHERE orden = 0 OR orden IS NULL;
 
 -- 3. Campo de quien capturó el registro (taquillera de turno)
-ALTER TABLE registros ADD COLUMN IF NOT EXISTS capturado_por_id   TEXT DEFAULT '';
+ALTER TABLE registros ADD COLUMN IF NOT EXISTS capturado_por_id    TEXT DEFAULT '';
 ALTER TABLE registros ADD COLUMN IF NOT EXISTS capturado_por_nombre TEXT DEFAULT '';
 
--- 4. Color asignado a cada usuario (lo asigna el administrador)
-ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS color TEXT DEFAULT '#1e293b';
+-- 4. Campo de quien COMPLETÓ la vuelta (puede ser otra taquillera)
+ALTER TABLE registros ADD COLUMN IF NOT EXISTS completado_por_id    TEXT DEFAULT '';
+ALTER TABLE registros ADD COLUMN IF NOT EXISTS completado_por_nombre TEXT DEFAULT '';
+
+-- 5. Color asignado a cada usuario (lo asigna el administrador)
+ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS color TEXT DEFAULT '#1e40af';
 
 -- Verificar que quedaron los campos
 SELECT column_name, data_type

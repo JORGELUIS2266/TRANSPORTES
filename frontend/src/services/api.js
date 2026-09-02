@@ -258,7 +258,9 @@ export const api = {
       arrastre:                registro.arrastre || false,
       orden:                   registro.orden ?? Date.now(),
       capturado_por_id:        registro.capturado_por_id    || '',
-      capturado_por_nombre:    registro.capturado_por_nombre || ''
+      capturado_por_nombre:    registro.capturado_por_nombre || '',
+      completado_por_id:       registro.completado_por_id   || '',
+      completado_por_nombre:   registro.completado_por_nombre || ''
     };
 
     let { data, error } = await supabase.from('registros').upsert([rec]).select();
@@ -266,7 +268,12 @@ export const api = {
     // Si falla por columnas nuevas que aún no existen en la BD (migración pendiente)
     if (error && error.message?.includes('column')) {
       console.warn('[api] Fallback sin campos nuevos:', error.message);
-      const { orden: _o, capturado_por_id: _c1, capturado_por_nombre: _c2, ...recSinNuevos } = rec;
+      const {
+        orden: _o,
+        capturado_por_id: _c1, capturado_por_nombre: _c2,
+        completado_por_id: _c3, completado_por_nombre: _c4,
+        ...recSinNuevos
+      } = rec;
       ({ data, error } = await supabase.from('registros').upsert([recSinNuevos]).select());
     }
 
