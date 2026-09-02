@@ -261,7 +261,15 @@ export const api = {
       capturado_por_nombre:    registro.capturado_por_nombre || ''
     };
 
-    const { data, error } = await supabase.from('registros').upsert([rec]).select();
+    let { data, error } = await supabase.from('registros').upsert([rec]).select();
+
+    // Si falla por columnas nuevas que aún no existen en la BD (migración pendiente)
+    if (error && error.message?.includes('column')) {
+      console.warn('[api] Fallback sin campos nuevos:', error.message);
+      const { orden: _o, capturado_por_id: _c1, capturado_por_nombre: _c2, ...recSinNuevos } = rec;
+      ({ data, error } = await supabase.from('registros').upsert([recSinNuevos]).select());
+    }
+
     if (error) throw new Error('Error guardando registro: ' + error.message);
 
     this.registrarActividad(

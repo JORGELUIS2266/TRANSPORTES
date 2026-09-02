@@ -155,7 +155,14 @@ export const useAuthStore = defineStore('auth', () => {
       color:        nuevoUsuario.color || '#1e293b'
     };
 
-    const { data, error } = await supabase.from('usuarios').insert([rec]).select();
+    let { data, error } = await supabase.from('usuarios').insert([rec]).select();
+
+    // Fallback: si la columna 'color' aún no existe en Supabase (migración pendiente)
+    if (error && error.message?.includes('color')) {
+      const { color: _c, ...recSinColor } = rec;
+      ({ data, error } = await supabase.from('usuarios').insert([recSinColor]).select());
+    }
+
     if (error) throw new Error('Error creando usuario: ' + error.message);
 
     const created = data?.[0] || rec;
@@ -205,7 +212,14 @@ export const useAuthStore = defineStore('auth', () => {
       updates.password_raw  = datos.password.trim();
     }
 
-    const { data, error } = await supabase.from('usuarios').update(updates).eq('id', datos.id).select();
+    let { data, error } = await supabase.from('usuarios').update(updates).eq('id', datos.id).select();
+
+    // Fallback: si la columna 'color' aún no existe en Supabase
+    if (error && error.message?.includes('color')) {
+      const { color: _c, ...updatesSinColor } = updates;
+      ({ data, error } = await supabase.from('usuarios').update(updatesSinColor).eq('id', datos.id).select());
+    }
+
     if (error) throw new Error('Error actualizando usuario: ' + error.message);
 
     // Actualizar en memoria local
