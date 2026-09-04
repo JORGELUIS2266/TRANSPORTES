@@ -491,14 +491,13 @@ const gruposPorDia = computed(() => {
       mapa[r.fecha] = { fecha: r.fecha, registros: [], sumB1: 0, sumB2: 0, sumInter: 0, sumGenerado: 0, sumCombustible: 0, sumNeto: 0 };
     }
     mapa[r.fecha].registros.push(r);
-    if (r.estado === 'completado') {
-      mapa[r.fecha].sumB1          += (Number(r.bitacora_tlaxiaco_putla) || 0);
-      mapa[r.fecha].sumB2          += (Number(r.bitacora_putla_tlaxiaco) || 0);
-      mapa[r.fecha].sumInter       += (Number(r.intermedios)             || 0);
-      mapa[r.fecha].sumGenerado    += (Number(r.total_generado)          || 0);
-      mapa[r.fecha].sumCombustible += (Number(r.combustible)             || 0);
-      mapa[r.fecha].sumNeto        += (Number(r.total_neto)              || 0);
-    }
+    // Sumar siempre, sin importar si es completado o pendiente
+    mapa[r.fecha].sumB1          += (Number(r.bitacora_tlaxiaco_putla) || 0);
+    mapa[r.fecha].sumB2          += (Number(r.bitacora_putla_tlaxiaco) || 0);
+    mapa[r.fecha].sumInter       += (Number(r.intermedios)             || 0);
+    mapa[r.fecha].sumGenerado    += (Number(r.total_generado)          || 0);
+    mapa[r.fecha].sumCombustible += (Number(r.combustible)             || 0);
+    mapa[r.fecha].sumNeto        += (Number(r.total_neto)              || 0);
   });
   const res = Object.values(mapa).sort((a, b) => (a.fecha || '').localeCompare(b.fecha || ''));
   res.forEach(g => {
@@ -573,7 +572,7 @@ const modoEdicion = computed(() => {
 function corteDeDiaParaCapturista(grupoRegistros, capturistaId) {
   // Returns { generado, combustible, neto, vueltas } for one capturista on one day
   let generado = 0, combustible = 0, neto = 0, vueltas = 0;
-  (grupoRegistros || []).filter(r => r.estado === 'completado').forEach(r => {
+  (grupoRegistros || []).forEach(r => {
     const esOwner    = r.capturado_por_id    === capturistaId;
     const esCompletor = r.completado_por_id  === capturistaId;
     if (esOwner && !r.completado_por_id) {
@@ -622,7 +621,7 @@ const capturistasEnSemana = computed(() => {
 const corteDeCaja = computed(() => {
   const mapa = {};
   
-  (registros.value || []).filter(r => r.estado === 'completado').forEach(r => {
+  (registros.value || []).forEach(r => {
     const ensureEntry = (id, nombre) => {
       if (!mapa[id]) {
         mapa[id] = {
@@ -676,9 +675,9 @@ const corteDeCaja = computed(() => {
 watch(() => auth.users, () => {}, { deep: true });
 
 const completados       = computed(() => registros.value.filter(r => r.estado === 'completado'));
-const granTotalGenerado    = computed(() => completados.value.reduce((s, r) => s + (Number(r.total_generado) || 0), 0));
-const granTotalCombustible = computed(() => completados.value.reduce((s, r) => s + (Number(r.combustible)    || 0), 0));
-const granTotalNeto        = computed(() => completados.value.reduce((s, r) => s + (Number(r.total_neto)     || 0), 0));
+const granTotalGenerado    = computed(() => registros.value.reduce((s, r) => s + (Number(r.total_generado) || 0), 0));
+const granTotalCombustible = computed(() => registros.value.reduce((s, r) => s + (Number(r.combustible)    || 0), 0));
+const granTotalNeto        = computed(() => registros.value.reduce((s, r) => s + (Number(r.total_neto)     || 0), 0));
 const vueltasCompletadas   = computed(() => completados.value.length);
 const vueltasPendientes    = computed(() => registros.value.filter(r => r.estado === 'pendiente').length);
 
