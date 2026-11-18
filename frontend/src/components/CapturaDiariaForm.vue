@@ -58,7 +58,20 @@
           </div>
         </div>
 
-        <span class="badge-single-turn">🔒 Vuelta fija: 1 por registro</span>
+        <div class="title-actions-right">
+          <button
+            type="button"
+            @click="abrirEscanerIA"
+            class="btn-ia-scan"
+            title="Tomar foto a la hoja Control de Corridas para rellenar automáticamente por color de lapicero"
+          >
+            📸 Autollenar con Foto IA
+            <span class="ia-quota-tag">
+              {{ auth.isAdmin ? '∞' : `${intentosIARestantes}/2 hoy` }}
+            </span>
+          </button>
+          <span class="badge-single-turn">🔒 Vuelta fija: 1 por registro</span>
+        </div>
       </div>
 
       <form @submit.prevent="guardar" class="form-grid">
@@ -350,24 +363,24 @@
               </td>
               <!-- Si está PENDIENTE mostramos los datos pero con aviso visual -->
               <td class="text-right font-mono" :class="r.estado === 'pendiente' ? 'cell-pending' : ''">
-                {{ r.estado === 'pendiente' ? '—' : '$' + Number(r.bitacora_tlaxiaco_putla || 0).toFixed(2) }}
+                {{ '$' + Number(r.bitacora_tlaxiaco_putla || 0).toFixed(2) }}
               </td>
               <td class="text-right font-mono" :class="r.estado === 'pendiente' ? 'cell-pending' : ''">
-                {{ r.estado === 'pendiente' ? '—' : '$' + Number(r.bitacora_putla_tlaxiaco || 0).toFixed(2) }}
+                {{ r.estado === 'pendiente' ? '$0.00' : '$' + Number(r.bitacora_putla_tlaxiaco || 0).toFixed(2) }}
               </td>
               <td class="text-right font-mono" :class="r.estado === 'pendiente' ? 'cell-pending' : ''">
-                {{ r.estado === 'pendiente' ? '—' : '$' + Number(r.intermedios || 0).toFixed(2) }}
+                {{ r.estado === 'pendiente' ? '$0.00' : '$' + Number(r.intermedios || 0).toFixed(2) }}
               </td>
               <td class="text-right font-mono font-bold" :class="r.estado === 'pendiente' ? 'cell-pending' : ''">
-                {{ r.estado === 'pendiente' ? '— (no contabilizado)' : '$' + Number(r.total_generado || 0).toFixed(2) }}
+                {{ '$' + Number(r.total_generado || 0).toFixed(2) }}
               </td>
               <td class="text-right font-mono" :class="r.estado === 'pendiente' ? 'cell-pending' : ''"
                   :style="r.estado !== 'pendiente' ? 'color:#d97706;' : ''">
-                {{ r.estado === 'pendiente' ? '—' : '$' + Number(r.combustible || 0).toFixed(2) }}
+                {{ '$' + Number(r.combustible || 0).toFixed(2) }}
               </td>
               <td class="text-right font-mono font-bold"
-                  :class="r.estado === 'pendiente' ? 'cell-pending' : (Number(r.total_neto || 0) < 0 ? 'text-red' : 'text-green')">
-                {{ r.estado === 'pendiente' ? '—' : '$' + Number(r.total_neto || 0).toFixed(2) }}
+                  :class="Number(r.total_neto || 0) < 0 ? 'text-red' : 'text-green'">
+                {{ '$' + Number(r.total_neto || 0).toFixed(2) }}
               </td>
               <td style="text-align:center;">
                 <span v-if="r.estado === 'pendiente'" class="badge badge-warning">⏳ PENDIENTE</span>
@@ -396,6 +409,16 @@
       </div>
     </div>
 
+    <!-- Modal Escáner IA -->
+    <EscanerBitacoraIAModal
+      v-if="mostrarEscanerIA"
+      :fechaDestino="form.fecha"
+      :registrosExistentesDelDia="registrosDelDia"
+      :unidadesCatalogo="unidades"
+      @cerrar="cerrarEscanerIA"
+      @guardado="onGuardadoLoteIA"
+    />
+
   </div>
 </template>
 
@@ -403,6 +426,9 @@
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
 import { api } from '../services/api';
 import { useAuthStore } from '../stores/auth';
+import EscanerBitacoraIAModal from './EscanerBitacoraIAModal.vue';
+import { getIntentosRestantesHoy } from '../services/iaVisionService';
+import { toast } from '../utils/toast';
 import {
   getSemanasSelectRecentFirst,
   getSemanaActualId,
@@ -411,6 +437,24 @@ import {
 } from '../utils/semanas';
 
 const auth = useAuthStore();
+const mostrarEscanerIA = ref(false);
+const intentosIARestantes = ref(getIntentosRestantesHoy(auth.currentUser?.id, auth.isAdmin));
+
+function abrirEscanerIA() {
+  intentosIARestantes.value = getIntentosRestantesHoy(auth.currentUser?.id, auth.isAdmin);
+  mostrarEscanerIA.value = true;
+}
+
+function cerrarEscanerIA() {
+  intentosIARestantes.value = getIntentosRestantesHoy(auth.currentUser?.id, auth.isAdmin);
+  mostrarEscanerIA.value = false;
+}
+
+async function onGuardadoLoteIA() {
+  intentosIARestantes.value = getIntentosRestantesHoy(auth.currentUser?.id, auth.isAdmin);
+  mostrarEscanerIA.value = false;
+  await cargar();
+}
 
 // ── Fecha actual por defecto ──────────────────────────────────────────────────
 const todayStr = new Date().toISOString().split('T')[0];
@@ -465,15 +509,15 @@ const registrosDelDia = computed(() => {
   return (registros.value || []).filter(r => r && r.fecha === f);
 });
 
-// Totales del día — SOLO cuentan los COMPLETADOS (los pendientes no entran al corte)
+// Totales del día — Incluye tanto completados como el monto ya cobrado en pendientes
 const completadosDelDia = computed(() => registrosDelDia.value.filter(r => r.estado === 'completado'));
 const pendientesDelDia  = computed(() => registrosDelDia.value.filter(r => r.estado === 'pendiente'));
-const sumB1Dia    = computed(() => completadosDelDia.value.reduce((acc, r) => acc + (Number(r.bitacora_tlaxiaco_putla) || 0), 0));
-const sumB2Dia    = computed(() => completadosDelDia.value.reduce((acc, r) => acc + (Number(r.bitacora_putla_tlaxiaco) || 0), 0));
-const sumInterDia = computed(() => completadosDelDia.value.reduce((acc, r) => acc + (Number(r.intermedios) || 0), 0));
-const sumGenDia   = computed(() => completadosDelDia.value.reduce((acc, r) => acc + (Number(r.total_generado) || 0), 0));
-const sumCombDia  = computed(() => completadosDelDia.value.reduce((acc, r) => acc + (Number(r.combustible) || 0), 0));
-const sumNetoDia  = computed(() => completadosDelDia.value.reduce((acc, r) => acc + (Number(r.total_neto) || 0), 0));
+const sumB1Dia    = computed(() => registrosDelDia.value.reduce((acc, r) => acc + (Number(r.bitacora_tlaxiaco_putla) || 0), 0));
+const sumB2Dia    = computed(() => registrosDelDia.value.reduce((acc, r) => acc + (Number(r.bitacora_putla_tlaxiaco) || 0), 0));
+const sumInterDia = computed(() => registrosDelDia.value.reduce((acc, r) => acc + (Number(r.intermedios) || 0), 0));
+const sumGenDia   = computed(() => registrosDelDia.value.reduce((acc, r) => acc + (Number(r.total_generado) || 0), 0));
+const sumCombDia  = computed(() => registrosDelDia.value.reduce((acc, r) => acc + (Number(r.combustible) || 0), 0));
+const sumNetoDia  = computed(() => registrosDelDia.value.reduce((acc, r) => acc + (Number(r.total_neto) || 0), 0));
 
 // Totales reactivos del formulario
 const totalGeneradoCalc = computed(() => {
@@ -572,6 +616,11 @@ async function guardarConEstado(estado) {
       orden:                 Date.now() // orden inicial = timestamp = se va al final
     });
 
+    toast.success(
+      estado === 'pendiente' ? 'Vuelta Guardada como Pendiente' : 'Vuelta Completada y Guardada',
+      `Unidad ${form.value.numero_unidad} (${form.value.nombre_conductor}) registrada correctamente.`
+    );
+
     await cargar();
 
     // Resetear formulario manteniendo la fecha y combustible en 600
@@ -585,7 +634,7 @@ async function guardarConEstado(estado) {
     form.value.concepto_gastos         = '';
 
   } catch (e) {
-    alert('❌ Error al guardar en Supabase: ' + e.message);
+    toast.error('Error al Guardar en Base de Datos', e.message);
   } finally {
     isSubmitting.value = false;
   }
@@ -773,6 +822,42 @@ onUnmounted(() => {
   border-radius: 20px;
   font-size: 0.75rem;
   font-weight: 800;
+}
+
+.title-actions-right {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.btn-ia-scan {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  background: linear-gradient(135deg, #0f172a, #1e293b);
+  color: #ffffff;
+  border: 2px solid #dc2626;
+  padding: 0.4rem 0.85rem;
+  border-radius: 20px;
+  font-size: 0.8rem;
+  font-weight: 900;
+  cursor: pointer;
+  box-shadow: 0 3px 10px rgba(15, 23, 42, 0.18);
+  transition: all 0.15s;
+}
+.btn-ia-scan:hover {
+  transform: translateY(-1px);
+  background: linear-gradient(135deg, #1e293b, #334155);
+  box-shadow: 0 5px 14px rgba(220, 38, 38, 0.25);
+}
+.ia-quota-tag {
+  background: #dc2626;
+  color: #ffffff;
+  padding: 0.1rem 0.45rem;
+  border-radius: 12px;
+  font-size: 0.68rem;
+  font-weight: 900;
 }
 
 .form-grid {

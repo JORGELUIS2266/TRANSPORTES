@@ -190,12 +190,54 @@
               </tr>
             </thead>
             <tbody>
-              <tr v-for="fila in filasDeLiquidacion" :key="fila.unidadId">
+              <tr v-for="fila in filasDeLiquidacion" :key="fila.numero" :class="{ 'fila-cuota-custom': fila.tieneCuotaEspecial }">
                 <td class="td-num">{{ fila.numero }}</td>
-                <td class="td-nombre">{{ fila.dueno }}</td>
+                <td class="td-nombre">
+                  {{ fila.dueno }}
+                  <span v-if="fila.tieneCuotaEspecial" class="badge-cuota-especial" title="Esta unidad tiene una cuota personalizada para esta semana">
+                    🛠️ Cuota ajustada
+                  </span>
+                </td>
                 <td class="td-center td-vueltas">{{ fila.vueltas }}</td>
                 <td class="td-right td-total">${{ fila.total.toLocaleString('es-MX') }}</td>
-                <td class="td-right td-cuota">${{ cuotaSemanal.toLocaleString('es-MX') }}</td>
+                <td class="td-right td-cuota">
+                  <!-- Modo edición individual de cuota -->
+                  <div v-if="editandoCuotaUnidad === fila.numero" class="cuota-edit-inline">
+                    <span class="cuota-mini-prefix">$</span>
+                    <input
+                      type="number"
+                      v-model.number="tempCuotaIndividual"
+                      class="cuota-inline-input"
+                      min="0"
+                      step="50"
+                      @keyup.enter="guardarCuotaIndividual(fila.numero)"
+                      @keyup.esc="cancelarEdicionCuota"
+                    />
+                    <button @click="guardarCuotaIndividual(fila.numero)" class="btn-cuota-action btn-cuota-save" title="Guardar cuota">✓</button>
+                    <button @click="cancelarEdicionCuota" class="btn-cuota-action btn-cuota-cancel" title="Cancelar">✕</button>
+                  </div>
+                  <!-- Vista normal con botón Modificar -->
+                  <div v-else class="cuota-display-inline">
+                    <span :class="{ 'cuota-modificada-text': fila.tieneCuotaEspecial }">
+                      ${{ fila.cuotaAplicada.toLocaleString('es-MX') }}
+                    </span>
+                    <button
+                      @click="abrirEdicionCuota(fila.numero, fila.cuotaAplicada)"
+                      class="btn-modificar-cuota"
+                      title="Modificar cuota solo para esta unidad (ej. taller o permiso)"
+                    >
+                      ✏️ Modificar
+                    </button>
+                    <button
+                      v-if="fila.tieneCuotaEspecial"
+                      @click="restaurarCuotaGeneral(fila.numero)"
+                      class="btn-restaurar-cuota"
+                      title="Restaurar a la cuota general"
+                    >
+                      ↺
+                    </button>
+                  </div>
+                </td>
                 <td class="td-right td-neto" :class="fila.neto < 0 ? 'neto-negativo' : 'neto-positivo'">
                   ${{ fila.neto.toLocaleString('es-MX') }}
                 </td>
@@ -206,7 +248,7 @@
                 <td colspan="2" class="tfoot-label">TOTALES</td>
                 <td class="td-center tfoot-val">{{ totalVueltas }}</td>
                 <td class="td-right tfoot-val">${{ totalTabla.toLocaleString('es-MX') }}</td>
-                <td class="td-right tfoot-val">${{ (cuotaSemanal * filasDeLiquidacion.length).toLocaleString('es-MX') }}</td>
+                <td class="td-right tfoot-val">${{ totalCuotasTabla.toLocaleString('es-MX') }}</td>
                 <td class="td-right tfoot-val neto-positivo">${{ netoTabla.toLocaleString('es-MX') }}</td>
               </tr>
             </tfoot>
@@ -238,6 +280,7 @@
 import { ref, computed, onMounted } from 'vue';
 import { useAuthStore }  from '../stores/auth';
 import { api }           from '../services/api';
+import { toast }         from '../utils/toast';
 import jsPDF             from 'jspdf';
 import 'jspdf-autotable';
 import {
@@ -272,8 +315,75 @@ const unidades     = ref([]);
 const extras       = ref([]);
 const cuotaSemanal = ref(1400);
 
+// ── Cuotas personalizadas por unidad (por semana) ─────────────────────────────
+const cuotasPorUnidad      = ref({}); // { '01': 700, '04': 0 }
+const editandoCuotaUnidad  = ref(null);
+const tempCuotaIndividual  = ref(0);
+
+function getStorageKeyCuotas(semId) {
+  return `th_cuotas_custom_${semId}`;
+}
+
+function cargarCuotasPersonalizadas() {
+  try {
+    const raw = localStorage.getItem(getStorageKeyCuotas(semanaId.value));
+    cuotasPorUnidad.value = raw ? JSON.parse(raw) : {};
+  } catch {
+    cuotasPorUnidad.value = {};
+  }
+  editandoCuotaUnidad.value = null;
+}
+
+function persistirCuotasPersonalizadas() {
+  try {
+    localStorage.setItem(getStorageKeyCuotas(semanaId.value), JSON.stringify(cuotasPorUnidad.value));
+  } catch {}
+}
+
+function abrirEdicionCuota(numeroUnidad, cuotaActual) {
+  editandoCuotaUnidad.value = numeroUnidad;
+  tempCuotaIndividual.value = Number(cuotaActual) || 0;
+}
+
+function guardarCuotaIndividual(numeroUnidad) {
+  const val = Math.max(0, Number(tempCuotaIndividual.value) || 0);
+  if (val === Number(cuotaSemanal.value)) {
+    const copia = { ...cuotasPorUnidad.value };
+    delete copia[numeroUnidad];
+    cuotasPorUnidad.value = copia;
+    toast.info(`Cuota Unidad ${numeroUnidad}`, `Se mantiene la cuota general de $${val.toLocaleString('es-MX')}.`);
+  } else {
+    cuotasPorUnidad.value = {
+      ...cuotasPorUnidad.value,
+      [numeroUnidad]: val
+    };
+    toast.success(
+      `Cuota Ajustada — Unidad ${numeroUnidad}`,
+      `Nueva cuota semanal aplicada para esta unidad: $${val.toLocaleString('es-MX')}.`
+    );
+  }
+  persistirCuotasPersonalizadas();
+  editandoCuotaUnidad.value = null;
+}
+
+function restaurarCuotaGeneral(numeroUnidad) {
+  const copia = { ...cuotasPorUnidad.value };
+  delete copia[numeroUnidad];
+  cuotasPorUnidad.value = copia;
+  persistirCuotasPersonalizadas();
+  toast.info(
+    `Cuota Restaurada — Unidad ${numeroUnidad}`,
+    `Se restauró la cuota general de $${Number(cuotaSemanal.value).toLocaleString('es-MX')}.`
+  );
+}
+
+function cancelarEdicionCuota() {
+  editandoCuotaUnidad.value = null;
+}
+
 async function cargar() {
   if (!auth.isAdmin) return;
+  cargarCuotasPersonalizadas();
   try {
     const [regs, unis] = await Promise.all([
       api.getRegistrosDeSemana(semanaId.value).catch(() => []),
@@ -361,14 +471,19 @@ const filasDeLiquidacion = computed(() => {
       const vueltasTotales = fila.vueltas + fila.vueltasExtra;
       // Total = Math.floor(vueltas_totales × cantidadPorVuelta) — truncado, sin redondear
       const total = Math.floor(vueltasTotales * cantidadPorVuelta.value);
-      const neto  = total - cuotaSemanal.value;
-      return { ...fila, vueltas: vueltasTotales, total, neto };
+      const tieneCuotaEspecial = Object.prototype.hasOwnProperty.call(cuotasPorUnidad.value, fila.numero);
+      const cuotaAplicada = tieneCuotaEspecial
+        ? Number(cuotasPorUnidad.value[fila.numero]) || 0
+        : (Number(cuotaSemanal.value) || 0);
+      const neto  = total - cuotaAplicada;
+      return { ...fila, vueltas: vueltasTotales, total, cuotaAplicada, tieneCuotaEspecial, neto };
     });
 });
 
 // Totales del pie de tabla
-const totalTabla = computed(() => filasDeLiquidacion.value.reduce((acc, f) => acc + f.total, 0));
-const netoTabla  = computed(() => filasDeLiquidacion.value.reduce((acc, f) => acc + f.neto, 0));
+const totalTabla       = computed(() => filasDeLiquidacion.value.reduce((acc, f) => acc + f.total, 0));
+const totalCuotasTabla = computed(() => filasDeLiquidacion.value.reduce((acc, f) => acc + f.cuotaAplicada, 0));
+const netoTabla        = computed(() => filasDeLiquidacion.value.reduce((acc, f) => acc + f.neto, 0));
 
 // ── Exportar PDF ──────────────────────────────────────────────────────────────
 function exportarPDF() {
@@ -401,7 +516,7 @@ function exportarPDF() {
     f.dueno,
     f.vueltas,
     `$${f.total.toLocaleString('es-MX')}`,
-    `$${cuotaSemanal.value.toLocaleString('es-MX')}`,
+    `$${f.cuotaAplicada.toLocaleString('es-MX')}`,
     `$${f.neto.toLocaleString('es-MX')}`
   ]);
 
@@ -410,7 +525,7 @@ function exportarPDF() {
     { content: 'TOTALES', colSpan: 2, styles: { fontStyle: 'bold', fillColor: [241, 245, 249] } },
     { content: String(totalVueltas.value), styles: { fontStyle: 'bold', fillColor: [241, 245, 249] } },
     { content: `$${totalTabla.value.toLocaleString('es-MX')}`, styles: { fontStyle: 'bold', fillColor: [241, 245, 249] } },
-    { content: `$${(cuotaSemanal.value * filasDeLiquidacion.value.length).toLocaleString('es-MX')}`, styles: { fontStyle: 'bold', fillColor: [241, 245, 249] } },
+    { content: `$${totalCuotasTabla.value.toLocaleString('es-MX')}`, styles: { fontStyle: 'bold', fillColor: [241, 245, 249] } },
     { content: `$${netoTabla.value.toLocaleString('es-MX')}`, styles: { fontStyle: 'bold', fillColor: [241, 245, 249] } }
   ]);
 
@@ -612,6 +727,113 @@ onMounted(() => {
 .td-total  { font-weight: 800; font-family: monospace; }
 .td-cuota  { color: #d97706; font-weight: 700; font-family: monospace; }
 .td-neto   { font-weight: 900; font-size: 0.95rem; font-family: monospace; }
+
+/* ── Edición individual de Cuota por Unidad ────────── */
+.fila-cuota-custom {
+  background: #fffbeb !important;
+}
+.badge-cuota-especial {
+  display: inline-block;
+  margin-left: 0.45rem;
+  background: #fef3c7;
+  color: #b45309;
+  border: 1px solid #f59e0b;
+  font-size: 0.65rem;
+  font-weight: 800;
+  padding: 0.1rem 0.45rem;
+  border-radius: 12px;
+  vertical-align: middle;
+  text-transform: none;
+}
+.cuota-display-inline {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.45rem;
+}
+.cuota-modificada-text {
+  color: #b45309;
+  font-weight: 900;
+  text-decoration: underline dotted #f59e0b;
+}
+.btn-modificar-cuota {
+  background: #eff6ff;
+  color: #1d4ed8;
+  border: 1px solid #bfdbfe;
+  border-radius: 6px;
+  padding: 0.2rem 0.5rem;
+  font-size: 0.72rem;
+  font-weight: 800;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.btn-modificar-cuota:hover {
+  background: #dbeafe;
+  border-color: #93c5fd;
+}
+.btn-restaurar-cuota {
+  background: #f1f5f9;
+  color: #475569;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  padding: 0.18rem 0.42rem;
+  font-size: 0.75rem;
+  font-weight: 900;
+  cursor: pointer;
+}
+.btn-restaurar-cuota:hover {
+  background: #e2e8f0;
+  color: #0f172a;
+}
+.cuota-edit-inline {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.25rem;
+}
+.cuota-mini-prefix {
+  font-weight: 900;
+  color: #d97706;
+  font-size: 0.85rem;
+}
+.cuota-inline-input {
+  width: 82px;
+  padding: 0.25rem 0.4rem;
+  border: 2px solid #f59e0b;
+  border-radius: 6px;
+  text-align: right;
+  font-weight: 900;
+  font-size: 0.85rem;
+  color: #b45309;
+  background: #ffffff;
+}
+.btn-cuota-action {
+  border: none;
+  border-radius: 6px;
+  width: 26px;
+  height: 26px;
+  font-weight: 900;
+  font-size: 0.8rem;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.btn-cuota-save {
+  background: #16a34a;
+  color: #ffffff;
+}
+.btn-cuota-save:hover {
+  background: #15803d;
+}
+.btn-cuota-cancel {
+  background: #fee2e2;
+  color: #dc2626;
+}
+.btn-cuota-cancel:hover {
+  background: #fecaca;
+}
 
 .neto-positivo { color: #16a34a; }
 .neto-negativo { color: #dc2626; }

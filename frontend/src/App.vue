@@ -1,5 +1,8 @@
 <template>
   <div class="app-container">
+    <!-- Centro de Notificaciones Futurista (Superior Izquierda) -->
+    <FuturisticToast />
+
     <!-- Si está autenticado, muestra el sistema completo -->
     <template v-if="auth.isAuthenticated">
       <Navbar />
@@ -20,6 +23,7 @@ import { useAuthStore } from './stores/auth';
 import Navbar from './components/Navbar.vue';
 import LoginModal from './components/LoginModal.vue';
 import UserAdminModal from './components/UserAdminModal.vue';
+import FuturisticToast from './components/FuturisticToast.vue';
 
 const auth = useAuthStore();
 </script>
